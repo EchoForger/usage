@@ -4,16 +4,35 @@
   usage -s 0.8            morning: sleep score, sets today's token budget
   usage -c 0.7 -d 0.4     any time: clarity (model size) and desire (effort)
   usage -c 0.5 --no-push  update locally only
+  usage -o                open the local site at http://localhost:8765
 """
 import argparse
 import json
+import socket
 import subprocess
+import sys
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data.json"
 BJ = timezone(timedelta(hours=8))
+PORT = 8765
+
+
+def open_local():
+    # Start a background server unless one is already listening, then open the browser.
+    with socket.socket() as s:
+        running = s.connect_ex(("127.0.0.1", PORT)) == 0
+    if not running:
+        subprocess.Popen(
+            [sys.executable, "-m", "http.server", str(PORT), "--bind", "127.0.0.1", "--directory", str(ROOT)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+        )
+    url = f"http://localhost:{PORT}/"
+    webbrowser.open(url)
+    print(f"Opened {url}")
 
 
 def unit(value):
@@ -29,9 +48,12 @@ def main():
     p.add_argument("-c", "--clarity", type=unit, help="how awake right now, 0-1")
     p.add_argument("-d", "--desire", type=unit, help="desire to think deeply right now, 0-1")
     p.add_argument("--no-push", action="store_true", help="do not commit and push")
+    p.add_argument("-o", "--open", action="store_true", help="open the local site in the browser")
     args = p.parse_args()
     if args.sleep is None and args.clarity is None and args.desire is None:
-        p.error("give at least one of -s, -c, -d")
+        if args.open:
+            return open_local()
+        p.error("give at least one of -s, -c, -d, -o")
 
     data = json.loads(DATA.read_text())
     now = datetime.now(BJ)
@@ -50,6 +72,8 @@ def main():
     DATA.write_text(json.dumps(data, indent=2) + "\n")
     print(json.dumps(data, indent=2))
 
+    if args.open:
+        open_local()
     if args.no_push:
         return
     git = ["git", "-C", str(ROOT)]
