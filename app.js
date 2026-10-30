@@ -5,6 +5,8 @@ const TOKENS_MIN = 200000;
 const TOKENS_MAX = 1000000;
 const SIZES = ["Solo", "Quartet", "Symph"];
 const EFFORTS = ["Light", "Medium", "High", "Extra high", "Ultra"];
+const SLEEP_STOPS = [0, 0.25, 0.5, 0.75, 1];
+const PUBLISH_DELAY = 30; // seconds without a click before changes are published
 
 const BENCHMARKS = [
   { group: { zh: "编程", en: "Coding" }, items: [
@@ -41,10 +43,10 @@ const STRINGS = {
     limitsDesc: "思考、说话、写代码和听音乐共用同一份额度。每天 00:00 到 09:00（UTC+8）停止输出。每日额度由昨晚的睡眠决定。",
     dailyLimit: "每日额度", bootsIn: "{t}后启动", resetsIn: "{t}后重置", left: "剩余 {p}%",
     offline: "离线 · 睡眠中", online: "在线",
-    sleepScore: "睡眠评分 {s}", stale: "（今天未记录，沿用 {d} 的）", updated: "{t}前更新",
+    stale: "今天还没记录睡眠，沿用 {d} 的额度 · ", updated: "{t}前更新",
     configTitle: "当前配置",
-    sizeTitle: "模型大小", sizeDesc: "由此刻大脑的清醒程度决定。", clarity: "清醒程度 {v}",
-    effortTitle: "推理强度", effortDesc: "由此刻想不想深度思考决定。", desire: "思考欲望 {v}",
+    sizeTitle: "模型大小", sizeDesc: "由此刻大脑的清醒程度决定。",
+    effortTitle: "推理强度", effortDesc: "由此刻想不想深度思考决定。",
     detailsTitle: "模型详情",
     kVersion: "版本", vVersion: "{v}，按年龄每季度发布",
     kNext: "下一版本", vNext: "Haonan-{v}，{d} 发布",
@@ -56,12 +58,10 @@ const STRINGS = {
     benchDesc: "自测成绩。除特别注明外，均在 Symph 大小、Ultra 推理强度下测得。",
     benchNote: "弱项均在 23:00 之后测得。Codeforces 和 EQ-Bench 3 的 Elo 进度条分别按 4000 和 2000 换算。",
     footer: "Haonan 不是 OpenAI 的产品。出生于 2001-08-10。",
-    editTitle: "编辑状态",
-    editDesc: "只在本机显示。保存后会提交并推送到 GitHub，线上页面几分钟内更新。",
-    sleepLabel: "睡眠评分（决定今天的 Token 总量）", clarityLabel: "清醒程度（决定模型大小）", desireLabel: "思考欲望（决定推理强度）",
-    save: "保存并发布", saving: "正在保存…", pushing: "已保存，正在推送到 GitHub…",
-    pushed: "已推送，线上页面几分钟内更新。", pushFailed: "已保存到本地，但推送失败：{e}", saveFailed: "保存失败：{e}",
-    unsaved: "有未保存的修改，页面上显示的是预览。",
+    sleepTitle: "昨晚睡眠", sleepDesc: "决定今天的 Token 总量。",
+    sleepLevels: ["很差", "较差", "一般", "不错", "很好"],
+    publishIn: "{s} 秒后自动发布", saving: "正在发布…",
+    pushed: "已发布，线上页面几分钟内更新。", pushFailed: "已保存到本地，但推送失败：{e}", saveFailed: "保存失败：{e}",
     dur: (d, h, m) => (d > 0 ? `${d} 天 ${h} 小时` : h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`),
   },
   en: {
@@ -73,10 +73,10 @@ const STRINGS = {
     limitsDesc: "Shared across thinking, talking, coding, and listening. Output is disabled from 00:00 to 09:00 (UTC+8). Daily budget is set by last night's sleep.",
     dailyLimit: "Daily limit", bootsIn: "Boots in {t}", resetsIn: "Resets in {t}", left: "{p}% left",
     offline: "Offline · sleeping", online: "Online",
-    sleepScore: "Sleep score {s}", stale: " (not logged today, using {d})", updated: "Updated {t} ago",
+    stale: "Sleep not logged today, using {d} · ", updated: "Updated {t} ago",
     configTitle: "Current configuration",
-    sizeTitle: "Model size", sizeDesc: "Set by how awake the brain is right now.", clarity: "Clarity {v}",
-    effortTitle: "Reasoning effort", effortDesc: "Set by how much it wants to think deeply right now.", desire: "Desire to think {v}",
+    sizeTitle: "Model size", sizeDesc: "Set by how awake the brain is right now.",
+    effortTitle: "Reasoning effort", effortDesc: "Set by how much it wants to think deeply right now.",
     detailsTitle: "Model details",
     kVersion: "Version", vVersion: "{v}, released quarterly by age",
     kNext: "Next release", vNext: "Haonan-{v} on {d}",
@@ -88,12 +88,10 @@ const STRINGS = {
     benchDesc: "Self-reported. Evaluated at Symph size and Ultra effort unless noted.",
     benchNote: "Weak spots were measured after 23:00. Codeforces Elo and EQ-Bench 3 Elo bars are scaled to 4000 and 2000.",
     footer: "Haonan is not an OpenAI product. Born 2001-08-10.",
-    editTitle: "Edit status",
-    editDesc: "Only visible on this machine. Saving commits and pushes to GitHub; the public page updates within a few minutes.",
-    sleepLabel: "Sleep score (sets today's token budget)", clarityLabel: "Clarity (sets model size)", desireLabel: "Desire to think (sets reasoning effort)",
-    save: "Save and publish", saving: "Saving…", pushing: "Saved. Pushing to GitHub…",
-    pushed: "Pushed. The public page updates within a few minutes.", pushFailed: "Saved locally, but push failed: {e}", saveFailed: "Save failed: {e}",
-    unsaved: "Unsaved changes. The page shows a preview.",
+    sleepTitle: "Last night's sleep", sleepDesc: "Sets today's token budget.",
+    sleepLevels: ["Poor", "Fair", "OK", "Good", "Great"],
+    publishIn: "Publishing in {s}s", saving: "Publishing…",
+    pushed: "Published. The public page updates within a few minutes.", pushFailed: "Saved locally, but push failed: {e}", saveFailed: "Save failed: {e}",
     dur: (d, h, m) => (d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`),
   },
 };
@@ -171,8 +169,10 @@ function $(id) {
   return document.getElementById(id);
 }
 
-function renderSeg(el, labels, active, format = (l) => l) {
-  el.innerHTML = labels.map((l) => `<span class="${l === active ? "on" : ""}">${format(l)}</span>`).join("");
+function renderSeg(el, labels, active) {
+  const html = labels.map((l, i) => `<span data-i="${i}" class="${i === active ? "on" : ""}">${l}</span>`).join("");
+  // Skip identical updates so hover state survives the 1s refresh.
+  if (el.innerHTML !== html) el.innerHTML = html;
 }
 
 function renderEffort(effort, name) {
@@ -181,6 +181,7 @@ function renderEffort(effort, name) {
   el.classList.toggle("ultra", effort === "Ultra");
   $("effort-label").textContent = effort;
   $("effort-model").textContent = name;
+  if (!el.classList.contains("animate")) requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("animate")));
 }
 
 // Drifting, twinkling dots shown inside the Ultra gradient.
@@ -238,16 +239,15 @@ function render(data) {
   $("left-tokens").textContent = `${q.left.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} tokens`;
   $("status-text").textContent = t(q.offline ? "offline" : "online");
 
-  renderSeg($("seg-size"), SIZES, size, (s) => `Haonan-${v.label}-${s}`);
+  renderSeg($("seg-sleep"), SLEEP_STOPS.map((s, i) => `${STRINGS[lang].sleepLevels[i]} · ${formatTokens(dailyTotal(s))}`),
+    Math.round(clamp01(data.sleep) * (SLEEP_STOPS.length - 1)));
+  renderSeg($("seg-size"), SIZES.map((s) => `Haonan-${v.label}-${s}`), SIZES.indexOf(size));
   renderEffort(effort, name);
-  $("clarity-text").textContent = t("clarity", { v: clamp01(data.clarity).toFixed(2) });
-  $("desire-text").textContent = t("desire", { v: clamp01(data.desire).toFixed(2) });
 
   const stale = data.sleepDate !== bjDateString(now) && !q.offline;
   const updated = new Date(data.updatedAt);
   $("updated-text").textContent =
-    t("sleepScore", { s: clamp01(data.sleep).toFixed(2) }) + (stale ? t("stale", { d: data.sleepDate }) : "") +
-    " · " + t("updated", { t: formatDuration(now - updated.getTime()) });
+    (stale ? t("stale", { d: data.sleepDate }) : "") + t("updated", { t: formatDuration(now - updated.getTime()) });
 
   const specs = [
     [t("kVersion"), t("vVersion", { v: v.label })],
@@ -267,77 +267,103 @@ async function main() {
   saved = await res.json();
   draft = { ...saved };
   render(draft);
-  setInterval(() => render(draft), 1000);
+  setInterval(() => { render(draft); renderToast(); }, 1000);
   $("lang-toggle").addEventListener("click", () => {
     lang = lang === "zh" ? "en" : "zh";
     localStorage.setItem("lang", lang);
     renderStatic();
     render(draft);
-    renderEditor();
+    renderToast();
   });
-  if (["localhost", "127.0.0.1"].includes(location.hostname)) setupEditor();
+  if (["localhost", "127.0.0.1"].includes(location.hostname)) setupEditing();
 }
 
 let saved = null;
 let draft = null;
-let status = null; // [key, vars] of the editor status message
+let touched = new Set(); // fields clicked since the last publish
+let timer = null; // pending publish
+let deadline = 0;
+let status = null; // [key, vars] shown in the toast
 
 function pendingChanges() {
   const changes = {};
-  for (const k of ["sleep", "clarity", "desire"]) {
-    if (draft[k] !== saved[k]) changes[k] = draft[k];
+  for (const k of touched) {
+    // Picking a sleep level always counts, so the same level can be logged for today.
+    if (k === "sleep" || draft[k] !== saved[k]) changes[k] = draft[k];
   }
-  // Logging the same sleep score again still marks it as today's.
-  if (saved.sleepDate !== bjDateString(Date.now())) changes.sleep = draft.sleep;
   return changes;
 }
 
-function renderEditor() {
-  if ($("editor").hidden) return;
-  for (const k of ["sleep", "clarity", "desire"]) {
-    $(`${k}-input`).value = draft[k];
-    $(`${k}-value`).textContent = clamp01(draft[k]).toFixed(2);
-  }
-  const dirty = Object.keys(pendingChanges()).length > 0;
-  const busy = status && status[0] === "saving";
-  $("save-button").disabled = !dirty || busy;
-  $("save-status").textContent = status ? t(...status) : dirty ? t("unsaved") : "";
+// Value in the middle of bucket i, so it maps back to the same label.
+function bucketValue(i, n) {
+  return Math.round(((i + 0.5) / n) * 100) / 100;
 }
 
-function setupEditor() {
-  $("editor").hidden = false;
-  for (const k of ["sleep", "clarity", "desire"]) {
-    $(`${k}-input`).addEventListener("input", (e) => {
-      draft[k] = Number(e.target.value);
-      status = null;
-      render(draft);
-      renderEditor();
-    });
-  }
-  $("save-button").addEventListener("click", save);
-  renderEditor();
+function setupEditing() {
+  document.body.classList.add("editable");
+  const pick = (key, value) => (e) => {
+    const i = e.target.closest("[data-i]")?.dataset.i;
+    if (i !== undefined) edit(key, value(Number(i)));
+  };
+  $("seg-sleep").addEventListener("click", pick("sleep", (i) => SLEEP_STOPS[i]));
+  $("seg-size").addEventListener("click", pick("clarity", (i) => bucketValue(i, SIZES.length)));
+  document.querySelector(".effort-track").addEventListener("click", (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const knob = 24; // keep in sync with --r in style.css
+    const pos = (e.clientX - r.left - knob) / (r.width - 2 * knob);
+    const i = Math.max(0, Math.min(EFFORTS.length - 1, Math.round(pos * (EFFORTS.length - 1))));
+    edit("desire", bucketValue(i, EFFORTS.length));
+  });
+  // Publish right away if the tab closes during the countdown.
+  addEventListener("pagehide", () => { if (timer) publish(true); });
 }
 
-async function save() {
+// Every click restarts the countdown; publish once clicks stop for PUBLISH_DELAY seconds.
+function edit(key, value) {
+  draft[key] = value;
+  touched.add(key);
+  status = null;
+  render(draft);
+  clearTimeout(timer);
+  timer = null;
+  if (Object.keys(pendingChanges()).length) {
+    deadline = Date.now() + PUBLISH_DELAY * 1000;
+    timer = setTimeout(publish, PUBLISH_DELAY * 1000);
+  }
+  renderToast();
+}
+
+function renderToast() {
+  const text = timer
+    ? t("publishIn", { s: Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) })
+    : status ? t(...status) : "";
+  $("toast").hidden = !text;
+  $("toast").textContent = text;
+}
+
+async function publish(leaving = false) {
+  clearTimeout(timer);
+  timer = null;
+  const changes = pendingChanges();
+  touched = new Set();
   status = ["saving"];
-  renderEditor();
+  renderToast();
   try {
     const res = await fetch("/api/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pendingChanges()),
+      body: JSON.stringify(changes),
+      keepalive: leaving,
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error);
     saved = body.data;
-    draft = { ...saved };
-    status = ["pushing"];
+    if (!timer) draft = { ...saved };
   } catch (e) {
     status = ["saveFailed", { e: e.message }];
-    return renderEditor();
+    return renderToast();
   }
   render(draft);
-  renderEditor();
   pollPush();
 }
 
@@ -346,7 +372,10 @@ async function pollPush() {
   const s = await res.json();
   if (s.state === "pushing") return setTimeout(pollPush, 2000);
   status = s.state === "pushed" ? ["pushed"] : ["pushFailed", { e: s.error }];
-  renderEditor();
+  renderToast();
+  if (s.state === "pushed") {
+    setTimeout(() => { if (status && status[0] === "pushed") status = null; }, 5000);
+  }
 }
 
 if (typeof document !== "undefined") main();

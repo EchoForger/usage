@@ -21,23 +21,6 @@
     </div>
   </header>
 
-  <section id="editor" hidden>
-    <h2 data-i18n="editTitle"></h2>
-    <p class="muted" data-i18n="editDesc"></p>
-    <div class="card">
-      <label class="slider"><span class="row"><span data-i18n="sleepLabel"></span><b id="sleep-value"></b></span>
-        <input type="range" id="sleep-input" min="0" max="1" step="0.05"></label>
-      <label class="slider"><span class="row"><span data-i18n="clarityLabel"></span><b id="clarity-value"></b></span>
-        <input type="range" id="clarity-input" min="0" max="1" step="0.05"></label>
-      <label class="slider"><span class="row"><span data-i18n="desireLabel"></span><b id="desire-value"></b></span>
-        <input type="range" id="desire-input" min="0" max="1" step="0.05"></label>
-      <div class="row actions">
-        <span class="muted small" id="save-status"></span>
-        <button type="button" class="primary" id="save-button" data-i18n="save"></button>
-      </div>
-    </div>
-  </section>
-
   <section>
     <h2 data-i18n="limitsTitle"></h2>
     <p class="muted" data-i18n="limitsDesc"></p>
@@ -48,6 +31,11 @@
         <div class="bar"><div id="left-bar"></div></div>
         <div class="row muted small"><span id="left-tokens">—</span><span id="status-text">—</span></div>
       </div>
+      <div class="config">
+        <div class="row"><span class="title" data-i18n="sleepTitle"></span></div>
+        <p class="muted small" data-i18n="sleepDesc"></p>
+        <div class="seg" id="seg-sleep"></div>
+      </div>
     </div>
     <p class="muted small" id="updated-text"></p>
   </section>
@@ -56,12 +44,12 @@
     <h2 data-i18n="configTitle"></h2>
     <div class="card">
       <div class="config">
-        <div class="row"><span class="title" data-i18n="sizeTitle"></span><span class="muted small" id="clarity-text">—</span></div>
+        <div class="row"><span class="title" data-i18n="sizeTitle"></span></div>
         <p class="muted small" data-i18n="sizeDesc"></p>
         <div class="seg" id="seg-size"></div>
       </div>
       <div class="config">
-        <div class="row"><span class="title" data-i18n="effortTitle"></span><span class="muted small" id="desire-text">—</span></div>
+        <div class="row"><span class="title" data-i18n="effortTitle"></span></div>
         <p class="muted small" data-i18n="effortDesc"></p>
         <div class="effort" id="effort">
           <div class="effort-label" id="effort-label">—</div>
@@ -90,6 +78,7 @@
 
   <footer class="muted small" data-i18n="footer"></footer>
 </main>
+<div class="toast" id="toast" hidden></div>
 <script src="app.js"></script>
 </body>
 </html>
