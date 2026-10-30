@@ -89,4 +89,6 @@ footer { padding-top: 24px; border-top: 1px solid var(--border); }
   .card { padding: 20px; }
   .specs { grid-template-columns: 1fr; }
   .seg span { font-size: 12px; }
+  .seg { border-radius: 16px; }
+  .seg span { min-width: 0; padding: 8px 2px; border-radius: 12px; white-space: normal; overflow-wrap: anywhere; }
 }

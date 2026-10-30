@@ -3,7 +3,7 @@ const BIRTH = { y: 2001, m: 8, d: 10 };
 const BOOT_HOUR = 9;
 const TOKENS_MIN = 200000;
 const TOKENS_MAX = 1000000;
-const SIZES = ["Solo", "Quartet", "Symphony"];
+const SIZES = ["Solo", "Quartet", "Symph"];
 const EFFORTS = ["Light", "Medium", "High", "Extra high", "Ultra"];
 
 const BENCHMARKS = [
@@ -53,7 +53,7 @@ const STRINGS = {
     kStrengths: "擅长", vStrengths: "代码、音乐、智能体任务",
     kCutoff: "知识截止",
     benchTitle: "基准测试",
-    benchDesc: "自测成绩。除特别注明外，均在 Symphony 大小、Ultra 推理强度下测得。",
+    benchDesc: "自测成绩。除特别注明外，均在 Symph 大小、Ultra 推理强度下测得。",
     benchNote: "弱项均在 23:00 之后测得。Codeforces 和 EQ-Bench 3 的 Elo 进度条分别按 4000 和 2000 换算。",
     footer: "Haonan 不是 OpenAI 的产品。出生于 2001-08-10。",
     editTitle: "编辑状态",
@@ -85,7 +85,7 @@ const STRINGS = {
     kStrengths: "Strengths", vStrengths: "Code, music, agentic tasks",
     kCutoff: "Knowledge cutoff",
     benchTitle: "Benchmarks",
-    benchDesc: "Self-reported. Evaluated at Symphony size and Ultra effort unless noted.",
+    benchDesc: "Self-reported. Evaluated at Symph size and Ultra effort unless noted.",
     benchNote: "Weak spots were measured after 23:00. Codeforces Elo and EQ-Bench 3 Elo bars are scaled to 4000 and 2000.",
     footer: "Haonan is not an OpenAI product. Born 2001-08-10.",
     editTitle: "Edit status",
@@ -171,8 +171,8 @@ function $(id) {
   return document.getElementById(id);
 }
 
-function renderSeg(el, labels, active) {
-  el.innerHTML = labels.map((l) => `<span class="${l === active ? "on" : ""}">${l}</span>`).join("");
+function renderSeg(el, labels, active, format = (l) => l) {
+  el.innerHTML = labels.map((l) => `<span class="${l === active ? "on" : ""}">${format(l)}</span>`).join("");
 }
 
 function renderBenchmarks() {
@@ -217,7 +217,7 @@ function render(data) {
   $("left-tokens").textContent = `${q.left.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} tokens`;
   $("status-text").textContent = t(q.offline ? "offline" : "online");
 
-  renderSeg($("seg-size"), SIZES, size);
+  renderSeg($("seg-size"), SIZES, size, (s) => `Haonan-${v.label}-${s}`);
   renderSeg($("seg-effort"), EFFORTS, effort);
   $("clarity-text").textContent = t("clarity", { v: clamp01(data.clarity).toFixed(2) });
   $("desire-text").textContent = t("desire", { v: clamp01(data.desire).toFixed(2) });
