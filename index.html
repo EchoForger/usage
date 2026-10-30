@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Haonan · Usage</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Model</p>
+    <h1 id="model-name">Haonan</h1>
+    <p class="lede">A biological reasoning model, trained on <span id="age-years">25</span> years of lived experience. Strong at code and music. Ships four versions a year, one per quarter of age.</p>
+    <div class="pills">
+      <span class="pill">Size · <b id="pill-size">—</b></span>
+      <span class="pill">Reasoning effort · <b id="pill-effort">—</b></span>
+      <span class="pill">Context · <b id="pill-context">—</b></span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Plan limits</h2>
+    <p class="muted">Shared across thinking, talking, coding, and listening. Output is disabled from 00:00 to 09:00 (UTC+8). Daily budget is set by last night's sleep.</p>
+    <div class="card">
+      <div class="limit">
+        <div class="row"><span class="title">Daily limit</span></div>
+        <div class="row muted"><span id="reset-text">—</span><span id="left-pct">—</span></div>
+        <div class="bar"><div id="left-bar"></div></div>
+        <div class="row muted small"><span id="left-tokens">—</span><span id="status-text">—</span></div>
+      </div>
+    </div>
+    <p class="muted small" id="updated-text"></p>
+  </section>
+
+  <section>
+    <h2>Current configuration</h2>
+    <div class="card">
+      <div class="config">
+        <div class="row"><span class="title">Model size</span><span class="muted small" id="clarity-text">—</span></div>
+        <p class="muted small">Set by how awake the brain is right now.</p>
+        <div class="seg" id="seg-size"></div>
+      </div>
+      <div class="config">
+        <div class="row"><span class="title">Reasoning effort</span><span class="muted small" id="desire-text">—</span></div>
+        <p class="muted small">Set by how much it wants to think deeply right now.</p>
+        <div class="seg" id="seg-effort"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Model details</h2>
+    <div class="card specs" id="specs"></div>
+  </section>
+
+  <section>
+    <h2>Benchmarks</h2>
+    <p class="muted">Self-reported. Evaluated at Symphony size and Ultra effort unless noted.</p>
+    <div id="benchmarks"></div>
+    <p class="muted small">Weak spots were measured after 23:00. Codeforces Elo and EQ-Bench 3 Elo bars are scaled to 4000 and 2000.</p>
+  </section>
+
+  <footer class="muted small">Haonan is not an OpenAI product. Born 2001-08-10.</footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

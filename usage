@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Update data.json and publish to GitHub Pages.
+
+  usage -s 0.8            morning: sleep score, sets today's token budget
+  usage -c 0.7 -d 0.4     any time: clarity (model size) and desire (effort)
+  usage -c 0.5 --no-push  update locally only
+"""
+import argparse
+import json
+import subprocess
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+DATA = ROOT / "data.json"
+BJ = timezone(timedelta(hours=8))
+
+
+def unit(value):
+    x = float(value)
+    if not 0 <= x <= 1:
+        raise argparse.ArgumentTypeError("must be between 0 and 1")
+    return x
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("-s", "--sleep", type=unit, help="sleep score, 0-1")
+    p.add_argument("-c", "--clarity", type=unit, help="how awake right now, 0-1")
+    p.add_argument("-d", "--desire", type=unit, help="desire to think deeply right now, 0-1")
+    p.add_argument("--no-push", action="store_true", help="do not commit and push")
+    args = p.parse_args()
+    if args.sleep is None and args.clarity is None and args.desire is None:
+        p.error("give at least one of -s, -c, -d")
+
+    data = json.loads(DATA.read_text())
+    now = datetime.now(BJ)
+    changes = []
+    if args.sleep is not None:
+        data["sleep"] = args.sleep
+        data["sleepDate"] = now.strftime("%Y-%m-%d")
+        changes.append(f"sleep={args.sleep}")
+    if args.clarity is not None:
+        data["clarity"] = args.clarity
+        changes.append(f"clarity={args.clarity}")
+    if args.desire is not None:
+        data["desire"] = args.desire
+        changes.append(f"desire={args.desire}")
+    data["updatedAt"] = now.isoformat(timespec="seconds")
+    DATA.write_text(json.dumps(data, indent=2) + "\n")
+    print(json.dumps(data, indent=2))
+
+    if args.no_push:
+        return
+    git = ["git", "-C", str(ROOT)]
+    subprocess.run(git + ["add", "data.json"], check=True)
+    subprocess.run(git + ["commit", "-q", "-m", "update: " + " ".join(changes)], check=True)
+    subprocess.run(git + ["push", "-q"], check=True)
+    print("Pushed. GitHub Pages usually updates within a minute.")
+
+
+if __name__ == "__main__":
+    main()
