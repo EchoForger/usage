@@ -3,6 +3,7 @@
 
   usage -s 0.8            morning: sleep score, sets today's token budget
   usage -c 0.7 -d 0.4     any time: clarity (model size) and desire (effort)
+  usage -l 0.6            any time: 60% of today's budget left now, decaying to 0 at midnight
   usage -c 0.5 --no-push  commit locally only
   usage -o                open the local site at http://localhost:8765
 """
@@ -45,6 +46,7 @@ def main():
     p.add_argument("-s", "--sleep", type=unit, help="sleep score, 0-1")
     p.add_argument("-c", "--clarity", type=unit, help="how awake right now, 0-1")
     p.add_argument("-d", "--desire", type=unit, help="desire to think deeply right now, 0-1")
+    p.add_argument("-l", "--left", type=unit, help="share of today's budget left right now, 0-1")
     p.add_argument("--no-push", action="store_true", help="commit but do not push")
     p.add_argument("-o", "--open", action="store_true", help="open the local site in the browser")
     args = p.parse_args()
@@ -52,7 +54,7 @@ def main():
     if not changes:
         if args.open:
             return open_local()
-        p.error("give at least one of -s, -c, -d, -o")
+        p.error("give at least one of -s, -c, -d, -l, -o")
 
     print(json.dumps(brain.update(changes), indent=2))
     if args.open:

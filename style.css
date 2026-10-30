@@ -43,7 +43,9 @@ main { max-width: 760px; margin: 0 auto; padding: 64px 24px 48px; }
 .lang-toggle:hover { background: var(--seg); }
 .limit + .config { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border); }
 /* Only the localhost page is editable. */
-.editable .seg span, .editable .effort-track { cursor: pointer; }
+.editable .seg span, .editable .effort-track, .editable .bar-hit { cursor: pointer; }
+.bar-hit { padding: 8px 0; margin: 4px 0 2px; }
+.bar-hit .bar { margin: 0; }
 .editable .seg span:not(.on):hover { color: var(--fg); }
 .toast {
   position: fixed; left: 50%; bottom: 24px; z-index: 2; transform: translateX(-50%);

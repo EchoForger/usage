@@ -9,7 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data.json"
 BJ = timezone(timedelta(hours=8))
-FIELDS = ("sleep", "clarity", "desire")
+# left: remaining share of today's budget at leftAt; it then decays linearly to 0 at midnight.
+FIELDS = ("sleep", "clarity", "desire", "left")
 
 _lock = threading.Lock()
 
@@ -22,6 +23,15 @@ def validate(changes):
     if not isinstance(changes, dict):
         raise ValueError("expected a JSON object")
     clean = {}
+    changes = dict(changes)
+    left_at = changes.pop("leftAt", None)
+    if left_at is not None:
+        if "left" not in changes:
+            raise ValueError("leftAt needs left")
+        t = datetime.fromtimestamp(float(left_at) / 1000, BJ)
+        if abs((t - datetime.now(BJ)).total_seconds()) > 3600:
+            raise ValueError("leftAt must be within an hour of now")
+        clean["leftAt"] = t.isoformat(timespec="seconds")
     for key, value in changes.items():
         if key not in FIELDS:
             raise ValueError(f"unknown field: {key}")
@@ -29,7 +39,7 @@ def validate(changes):
         if not 0 <= x <= 1:
             raise ValueError(f"{key} must be between 0 and 1")
         clean[key] = round(x, 4)
-    if not clean:
+    if not set(clean) & set(FIELDS):
         raise ValueError("give at least one of " + ", ".join(FIELDS))
     return clean
 
@@ -43,10 +53,12 @@ def update(changes):
         data.update(changes)
         if "sleep" in changes:
             data["sleepDate"] = now.strftime("%Y-%m-%d")
+        if "left" in changes and "leftAt" not in changes:
+            data["leftAt"] = now.isoformat(timespec="seconds")
         data["updatedAt"] = now.isoformat(timespec="seconds")
         DATA.write_text(json.dumps(data, indent=2) + "\n")
         git("add", "data.json")
-        git("commit", "-q", "-m", "update: " + " ".join(f"{k}={v}" for k, v in changes.items()))
+        git("commit", "-q", "-m", "update: " + " ".join(f"{k}={v}" for k, v in changes.items() if k in FIELDS))
     return data
 
 

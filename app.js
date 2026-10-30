@@ -6,7 +6,7 @@ const TOKENS_MAX = 1000000;
 const SIZES = ["Solo", "Quartet", "Symph"];
 const EFFORTS = ["Light", "Medium", "High", "Extra high", "Ultra"];
 const SLEEP_STOPS = [0, 0.25, 0.5, 0.75, 1];
-const PUBLISH_DELAY = 30; // seconds without a click before changes are published
+const PUBLISH_DELAY = 10; // seconds without a click before changes are published
 
 const BENCHMARKS = [
   { group: { zh: "编程", en: "Coding" }, items: [
@@ -133,14 +133,18 @@ function dailyTotal(sleep) {
   return Math.round(TOKENS_MIN + (TOKENS_MAX - TOKENS_MIN) * clamp01(sleep));
 }
 
-function quota(now, total) {
+// Remaining budget decays linearly to 0 at midnight, from 100% at 09:00 by default,
+// or from a manually set level (left) at the time it was set (leftAt) today.
+function quota(now, total, left, leftAt) {
   const { y, m, d, h } = bjParts(now);
   const boot = bj(y, m, d, BOOT_HOUR);
   const end = bj(y, m, d + 1);
   if (h < BOOT_HOUR) {
     return { offline: true, left: 0, fraction: 0, resetAt: boot };
   }
-  const fraction = (end - now) / (end - boot);
+  let fraction = (end - now) / (end - boot);
+  const at = Date.parse(leftAt);
+  if (at >= boot && at < end) fraction = clamp01(left) * Math.min(1, (end - now) / (end - at));
   return { offline: false, left: Math.round(total * fraction), fraction, resetAt: bj(y, m, d + 1, BOOT_HOUR) };
 }
 
@@ -223,7 +227,7 @@ function render(data) {
   const size = bucket(data.clarity, SIZES);
   const effort = bucket(data.desire, EFFORTS);
   const total = dailyTotal(data.sleep);
-  const q = quota(now, total);
+  const q = quota(now, total, data.left, data.leftAt);
   const name = `Haonan-${v.label}-${size}`;
 
   document.title = `${name} · Usage`;
@@ -289,8 +293,9 @@ function pendingChanges() {
   const changes = {};
   for (const k of touched) {
     // Picking a sleep level always counts, so the same level can be logged for today.
-    if (k === "sleep" || draft[k] !== saved[k]) changes[k] = draft[k];
+    if (k === "sleep" || k === "left" || draft[k] !== saved[k]) changes[k] = draft[k];
   }
+  if (touched.has("left")) changes.leftAt = Date.parse(draft.leftAt);
   return changes;
 }
 
@@ -307,6 +312,12 @@ function setupEditing() {
   };
   $("seg-sleep").addEventListener("click", pick("sleep", (i) => SLEEP_STOPS[i]));
   $("seg-size").addEventListener("click", pick("clarity", (i) => bucketValue(i, SIZES.length)));
+  $("left-hit").addEventListener("click", (e) => {
+    if (quota(Date.now(), 0).offline) return;
+    const r = $("left-hit").getBoundingClientRect();
+    draft.leftAt = new Date().toISOString();
+    edit("left", Math.round(clamp01((e.clientX - r.left) / r.width) * 100) / 100);
+  });
   document.querySelector(".effort-track").addEventListener("click", (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     const knob = 24; // keep in sync with --r in style.css
