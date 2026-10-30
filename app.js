@@ -56,6 +56,12 @@ const STRINGS = {
     benchDesc: "自测成绩。除特别注明外，均在 Symphony 大小、Ultra 推理强度下测得。",
     benchNote: "弱项均在 23:00 之后测得。Codeforces 和 EQ-Bench 3 的 Elo 进度条分别按 4000 和 2000 换算。",
     footer: "Haonan 不是 OpenAI 的产品。出生于 2001-08-10。",
+    editTitle: "编辑状态",
+    editDesc: "只在本机显示。保存后会提交并推送到 GitHub，线上页面几分钟内更新。",
+    sleepLabel: "睡眠评分（决定今天的 Token 总量）", clarityLabel: "清醒程度（决定模型大小）", desireLabel: "思考欲望（决定推理强度）",
+    save: "保存并发布", saving: "正在保存…", pushing: "已保存，正在推送到 GitHub…",
+    pushed: "已推送，线上页面几分钟内更新。", pushFailed: "已保存到本地，但推送失败：{e}", saveFailed: "保存失败：{e}",
+    unsaved: "有未保存的修改，页面上显示的是预览。",
     dur: (d, h, m) => (d > 0 ? `${d} 天 ${h} 小时` : h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`),
   },
   en: {
@@ -82,6 +88,12 @@ const STRINGS = {
     benchDesc: "Self-reported. Evaluated at Symphony size and Ultra effort unless noted.",
     benchNote: "Weak spots were measured after 23:00. Codeforces Elo and EQ-Bench 3 Elo bars are scaled to 4000 and 2000.",
     footer: "Haonan is not an OpenAI product. Born 2001-08-10.",
+    editTitle: "Edit status",
+    editDesc: "Only visible on this machine. Saving commits and pushes to GitHub; the public page updates within a few minutes.",
+    sleepLabel: "Sleep score (sets today's token budget)", clarityLabel: "Clarity (sets model size)", desireLabel: "Desire to think (sets reasoning effort)",
+    save: "Save and publish", saving: "Saving…", pushing: "Saved. Pushing to GitHub…",
+    pushed: "Pushed. The public page updates within a few minutes.", pushFailed: "Saved locally, but push failed: {e}", saveFailed: "Save failed: {e}",
+    unsaved: "Unsaved changes. The page shows a preview.",
     dur: (d, h, m) => (d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`),
   },
 };
@@ -230,15 +242,89 @@ function render(data) {
 async function main() {
   renderStatic();
   const res = await fetch(`data.json?t=${Date.now()}`, { cache: "no-store" });
-  const data = await res.json();
-  render(data);
-  setInterval(() => render(data), 1000);
+  saved = await res.json();
+  draft = { ...saved };
+  render(draft);
+  setInterval(() => render(draft), 1000);
   $("lang-toggle").addEventListener("click", () => {
     lang = lang === "zh" ? "en" : "zh";
     localStorage.setItem("lang", lang);
     renderStatic();
-    render(data);
+    render(draft);
+    renderEditor();
   });
+  if (["localhost", "127.0.0.1"].includes(location.hostname)) setupEditor();
+}
+
+let saved = null;
+let draft = null;
+let status = null; // [key, vars] of the editor status message
+
+function pendingChanges() {
+  const changes = {};
+  for (const k of ["sleep", "clarity", "desire"]) {
+    if (draft[k] !== saved[k]) changes[k] = draft[k];
+  }
+  // Logging the same sleep score again still marks it as today's.
+  if (saved.sleepDate !== bjDateString(Date.now())) changes.sleep = draft.sleep;
+  return changes;
+}
+
+function renderEditor() {
+  if ($("editor").hidden) return;
+  for (const k of ["sleep", "clarity", "desire"]) {
+    $(`${k}-input`).value = draft[k];
+    $(`${k}-value`).textContent = clamp01(draft[k]).toFixed(2);
+  }
+  const dirty = Object.keys(pendingChanges()).length > 0;
+  const busy = status && status[0] === "saving";
+  $("save-button").disabled = !dirty || busy;
+  $("save-status").textContent = status ? t(...status) : dirty ? t("unsaved") : "";
+}
+
+function setupEditor() {
+  $("editor").hidden = false;
+  for (const k of ["sleep", "clarity", "desire"]) {
+    $(`${k}-input`).addEventListener("input", (e) => {
+      draft[k] = Number(e.target.value);
+      status = null;
+      render(draft);
+      renderEditor();
+    });
+  }
+  $("save-button").addEventListener("click", save);
+  renderEditor();
+}
+
+async function save() {
+  status = ["saving"];
+  renderEditor();
+  try {
+    const res = await fetch("/api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pendingChanges()),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error);
+    saved = body.data;
+    draft = { ...saved };
+    status = ["pushing"];
+  } catch (e) {
+    status = ["saveFailed", { e: e.message }];
+    return renderEditor();
+  }
+  render(draft);
+  renderEditor();
+  pollPush();
+}
+
+async function pollPush() {
+  const res = await fetch("/api/status", { cache: "no-store" });
+  const s = await res.json();
+  if (s.state === "pushing") return setTimeout(pollPush, 2000);
+  status = s.state === "pushed" ? ["pushed"] : ["pushFailed", { e: s.error }];
+  renderEditor();
 }
 
 if (typeof document !== "undefined") main();

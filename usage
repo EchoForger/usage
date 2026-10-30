@@ -3,7 +3,7 @@
 
   usage -s 0.8            morning: sleep score, sets today's token budget
   usage -c 0.7 -d 0.4     any time: clarity (model size) and desire (effort)
-  usage -c 0.5 --no-push  update locally only
+  usage -c 0.5 --no-push  commit locally only
   usage -o                open the local site at http://localhost:8765
 """
 import argparse
@@ -12,27 +12,11 @@ import socket
 import subprocess
 import sys
 import webbrowser
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-DATA = ROOT / "data.json"
-BJ = timezone(timedelta(hours=8))
-PORT = 8765
-
-
-def open_local():
-    # Start a background server unless one is already listening, then open the browser.
-    with socket.socket() as s:
-        running = s.connect_ex(("127.0.0.1", PORT)) == 0
-    if not running:
-        subprocess.Popen(
-            [sys.executable, "-m", "http.server", str(PORT), "--bind", "127.0.0.1", "--directory", str(ROOT)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
-        )
-    url = f"http://localhost:{PORT}/"
-    webbrowser.open(url)
-    print(f"Opened {url}")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import brain  # noqa: E402
+from server import PORT  # noqa: E402
 
 
 def unit(value):
@@ -42,44 +26,40 @@ def unit(value):
     return x
 
 
+def open_local():
+    # The launchd service normally keeps the server up; start one if it is not.
+    with socket.socket() as s:
+        running = s.connect_ex(("127.0.0.1", PORT)) == 0
+    if not running:
+        subprocess.Popen(
+            [sys.executable, str(brain.ROOT / "server.py")],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+        )
+    url = f"http://localhost:{PORT}/"
+    webbrowser.open(url)
+    print(f"Opened {url}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("-s", "--sleep", type=unit, help="sleep score, 0-1")
     p.add_argument("-c", "--clarity", type=unit, help="how awake right now, 0-1")
     p.add_argument("-d", "--desire", type=unit, help="desire to think deeply right now, 0-1")
-    p.add_argument("--no-push", action="store_true", help="do not commit and push")
+    p.add_argument("--no-push", action="store_true", help="commit but do not push")
     p.add_argument("-o", "--open", action="store_true", help="open the local site in the browser")
     args = p.parse_args()
-    if args.sleep is None and args.clarity is None and args.desire is None:
+    changes = {k: v for k in brain.FIELDS if (v := getattr(args, k)) is not None}
+    if not changes:
         if args.open:
             return open_local()
         p.error("give at least one of -s, -c, -d, -o")
 
-    data = json.loads(DATA.read_text())
-    now = datetime.now(BJ)
-    changes = []
-    if args.sleep is not None:
-        data["sleep"] = args.sleep
-        data["sleepDate"] = now.strftime("%Y-%m-%d")
-        changes.append(f"sleep={args.sleep}")
-    if args.clarity is not None:
-        data["clarity"] = args.clarity
-        changes.append(f"clarity={args.clarity}")
-    if args.desire is not None:
-        data["desire"] = args.desire
-        changes.append(f"desire={args.desire}")
-    data["updatedAt"] = now.isoformat(timespec="seconds")
-    DATA.write_text(json.dumps(data, indent=2) + "\n")
-    print(json.dumps(data, indent=2))
-
+    print(json.dumps(brain.update(changes), indent=2))
     if args.open:
         open_local()
     if args.no_push:
         return
-    git = ["git", "-C", str(ROOT)]
-    subprocess.run(git + ["add", "data.json"], check=True)
-    subprocess.run(git + ["commit", "-q", "-m", "update: " + " ".join(changes)], check=True)
-    subprocess.run(git + ["push", "-q"], check=True)
+    brain.push()
     print("Pushed. GitHub Pages usually updates within a minute.")
 
 

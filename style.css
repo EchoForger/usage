@@ -41,6 +41,16 @@ main { max-width: 760px; margin: 0 auto; padding: 64px 24px 48px; }
   background: var(--bg); color: var(--fg); font: inherit; font-size: 14px; cursor: pointer;
 }
 .lang-toggle:hover { background: var(--seg); }
+.slider { display: block; }
+.slider + .slider { margin-top: 20px; }
+.slider b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.slider input { width: 100%; margin: 10px 0 0; accent-color: var(--accent); }
+.actions { margin-top: 24px; align-items: center; }
+.primary {
+  padding: 10px 20px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--accent); color: var(--accent-fg); font: inherit; font-size: 15px; font-weight: 500;
+}
+.primary:disabled { opacity: .5; cursor: default; }
 header { margin-bottom: 48px; }
 .eyebrow { margin: 0 0 8px; color: var(--muted); font-size: 14px; }
 h1 { margin: 0 0 16px; font-size: 44px; font-weight: 600; letter-spacing: -0.02em; }
