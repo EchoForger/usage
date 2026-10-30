@@ -175,6 +175,27 @@ function renderSeg(el, labels, active, format = (l) => l) {
   el.innerHTML = labels.map((l) => `<span class="${l === active ? "on" : ""}">${format(l)}</span>`).join("");
 }
 
+function renderEffort(effort, name) {
+  const el = $("effort");
+  el.style.setProperty("--pos", EFFORTS.indexOf(effort) / (EFFORTS.length - 1));
+  el.classList.toggle("ultra", effort === "Ultra");
+  $("effort-label").textContent = effort;
+  $("effort-model").textContent = name;
+}
+
+// Drifting, twinkling dots shown inside the Ultra gradient.
+function createSparkles(count = 28) {
+  const rand = (a, b) => a + Math.random() * (b - a);
+  $("sparkles").innerHTML = Array.from({ length: count }, () => {
+    const size = rand(1.5, 3.5).toFixed(1);
+    const dur = rand(3, 7);
+    return `<i style="left:${rand(0, 95).toFixed(1)}%;top:${rand(10, 85).toFixed(1)}%;` +
+      `width:${size}px;height:${size}px;--peak:${rand(0.5, 1).toFixed(2)};` +
+      `--dx:${rand(20, 70).toFixed(0)}px;--dy:${rand(-8, 8).toFixed(0)}px;` +
+      `--dur:${dur.toFixed(1)}s;--delay:-${rand(0, dur).toFixed(1)}s"></i>`;
+  }).join("");
+}
+
 function renderBenchmarks() {
   $("benchmarks").innerHTML = BENCHMARKS.map((g) => `
     <h3>${g.group[lang]}</h3>
@@ -218,7 +239,7 @@ function render(data) {
   $("status-text").textContent = t(q.offline ? "offline" : "online");
 
   renderSeg($("seg-size"), SIZES, size, (s) => `Haonan-${v.label}-${s}`);
-  renderSeg($("seg-effort"), EFFORTS, effort);
+  renderEffort(effort, name);
   $("clarity-text").textContent = t("clarity", { v: clamp01(data.clarity).toFixed(2) });
   $("desire-text").textContent = t("desire", { v: clamp01(data.desire).toFixed(2) });
 
@@ -241,6 +262,7 @@ function render(data) {
 
 async function main() {
   renderStatic();
+  createSparkles();
   const res = await fetch(`data.json?t=${Date.now()}`, { cache: "no-store" });
   saved = await res.json();
   draft = { ...saved };
