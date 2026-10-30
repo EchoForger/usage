@@ -60,7 +60,7 @@ const STRINGS = {
     footer: "Haonan 不是 OpenAI 的产品。出生于 2001-08-10。",
     sleepTitle: "昨晚睡眠", sleepDesc: "决定今天的 Token 总量。",
     sleepLevels: ["很差", "较差", "一般", "不错", "很好"],
-    publishIn: "{s} 秒后自动发布", saving: "正在发布…",
+    publishIn: "{s} 秒后自动发布", saving: "正在保存…", pushing: "已保存，正在推送到 GitHub（网络慢时可能要几分钟）…",
     pushed: "已发布，线上页面几分钟内更新。", pushFailed: "已保存到本地，但推送失败：{e}", saveFailed: "保存失败：{e}",
     dur: (d, h, m) => (d > 0 ? `${d} 天 ${h} 小时` : h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`),
   },
@@ -90,7 +90,7 @@ const STRINGS = {
     footer: "Haonan is not an OpenAI product. Born 2001-08-10.",
     sleepTitle: "Last night's sleep", sleepDesc: "Sets today's token budget.",
     sleepLevels: ["Poor", "Fair", "OK", "Good", "Great"],
-    publishIn: "Publishing in {s}s", saving: "Publishing…",
+    publishIn: "Publishing in {s}s", saving: "Saving…", pushing: "Saved. Pushing to GitHub (may take a few minutes on a slow network)…",
     pushed: "Published. The public page updates within a few minutes.", pushFailed: "Saved locally, but push failed: {e}", saveFailed: "Save failed: {e}",
     dur: (d, h, m) => (d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`),
   },
@@ -359,6 +359,7 @@ async function publish(leaving = false) {
     if (!res.ok) throw new Error(body.error);
     saved = body.data;
     if (!timer) draft = { ...saved };
+    status = ["pushing"];
   } catch (e) {
     status = ["saveFailed", { e: e.message }];
     return renderToast();
@@ -368,8 +369,12 @@ async function publish(leaving = false) {
 }
 
 async function pollPush() {
-  const res = await fetch("/api/status", { cache: "no-store" });
-  const s = await res.json();
+  let s;
+  try {
+    s = await (await fetch("/api/status", { cache: "no-store" })).json();
+  } catch {
+    return setTimeout(pollPush, 2000);
+  }
   if (s.state === "pushing") return setTimeout(pollPush, 2000);
   status = s.state === "pushed" ? ["pushed"] : ["pushFailed", { e: s.error }];
   renderToast();

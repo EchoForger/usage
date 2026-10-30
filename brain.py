@@ -54,12 +54,18 @@ def push(retries=3):
     """Push to origin, retrying because the connection to GitHub is flaky."""
     with _lock:
         for attempt in range(retries):
-            result = subprocess.run(["git", "-C", str(ROOT), "push", "-q"], capture_output=True, text=True)
+            try:
+                result = subprocess.run(["git", "-C", str(ROOT), "push", "-q"],
+                                        capture_output=True, text=True, timeout=90)
+            except subprocess.TimeoutExpired:
+                error = "git push timed out after 90s"
+                continue
             if result.returncode == 0:
                 return
+            error = result.stderr.strip() or "git push failed"
             if attempt < retries - 1:
                 time.sleep(3)
-    raise RuntimeError(result.stderr.strip() or "git push failed")
+    raise RuntimeError(error)
 
 
 def git(*args):
