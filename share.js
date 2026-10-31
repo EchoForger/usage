@@ -2,7 +2,6 @@
 const SHARE_W = 540;
 const SHARE_H = 960;
 const SHARE_SCALE = 4; // 540x960 layout units -> 2160x3840 pixels
-const SHARE_BENCH = ["SWE-bench Verified", "MuChoMusic", "ARC-AGI-2", "OpenAI-MRCR (8-needle)"];
 const FONT = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif';
 
 function shareColors() {
@@ -10,7 +9,7 @@ function shareColors() {
   const v = (name) => css.getPropertyValue(name).trim();
   return {
     bg: v("--bg"), fg: v("--fg"), muted: v("--muted"), card: v("--card"), border: v("--border"),
-    track: v("--track"), fill: v("--fill"), weak: v("--weak"), blue: "#2f6bd6", purple: "#a46cf0",
+    track: v("--track"), fill: v("--fill"), seg: v("--seg"), accent: v("--accent"), accentFg: v("--accent-fg"), blue: "#2f6bd6", purple: "#a46cf0",
   };
 }
 
@@ -28,6 +27,24 @@ function pill(ctx, x, y, h, w, r, fill) {
   ctx.roundRect(x, y, w, h, r);
   ctx.fillStyle = fill;
   ctx.fill();
+}
+
+// Segmented control like the page: all options visible, the current one highlighted.
+function drawSeg(ctx, c, x, y, w, labels, active) {
+  const h = 36;
+  const gap = 4;
+  pill(ctx, x, y, h, w, h / 2, c.seg);
+  const sw = (w - gap * (labels.length + 1)) / labels.length;
+  labels.forEach((label, i) => {
+    const sx = x + gap + i * (sw + gap);
+    if (i === active) pill(ctx, sx, y + gap, h - 2 * gap, sw, (h - 2 * gap) / 2, c.accent);
+    let fs = 13;
+    ctx.font = `500 ${fs}px ${FONT}`;
+    while (fs > 9 && ctx.measureText(label).width > sw - 8) ctx.font = `500 ${(fs -= 0.5)}px ${FONT}`;
+    text(ctx, label, sx + sw / 2, y + h / 2 + fs * 0.36, {
+      size: fs, weight: i === active ? 500 : 400, color: i === active ? c.accentFg : c.muted, align: "center",
+    });
+  });
 }
 
 function card(ctx, c, y, h) {
@@ -87,8 +104,8 @@ function drawShare(ctx, data, now) {
     px += w + 8;
   }
 
-  // Daily limit
-  card(ctx, c, 236, 196);
+  // Daily limit, with the sleep level that set it
+  card(ctx, c, 236, 300);
   text(ctx, t("dailyLimit"), L, 276, { size: 18, weight: 500, color: c.fg });
   text(ctx, t(q.offline ? "offline" : "online"), R, 276, { size: 14, color: c.muted, align: "right" });
   const pct = `${Math.floor(q.fraction * 100)}%`;
@@ -99,27 +116,30 @@ function drawShare(ctx, data, now) {
   text(ctx, `${q.left.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} tokens`, L, 408, { size: 13, color: c.muted });
   text(ctx, t(q.offline ? "bootsIn" : "resetsIn", { t: formatDuration(q.resetAt - now) }), R, 408,
     { size: 13, color: c.muted, align: "right" });
+  ctx.fillStyle = c.border;
+  ctx.fillRect(L, 428, R - L, 1);
+  const sleepIndex = Math.round(clamp01(data.sleep) * (SLEEP_STOPS.length - 1));
+  text(ctx, t("sleepTitle"), L, 462, { size: 15, weight: 500, color: c.fg });
+  text(ctx, t("tier", { i: sleepIndex + 1, n: SLEEP_STOPS.length }), R, 462, { size: 13, color: c.muted, align: "right" });
+  drawSeg(ctx, c, L, 478, R - L,
+    SLEEP_STOPS.map((s, i) => `${STRINGS[lang].sleepLevels[i]} · ${formatTokens(dailyTotal(s))}`), sleepIndex);
+
+  // Model size: all three tiers, current one highlighted
+  const sizeIndex = SIZES.indexOf(size);
+  card(ctx, c, 552, 116);
+  text(ctx, t("sizeTitle"), L, 592, { size: 18, weight: 500, color: c.fg });
+  text(ctx, t("tier", { i: sizeIndex + 1, n: SIZES.length }), R, 592, { size: 13, color: c.muted, align: "right" });
+  drawSeg(ctx, c, L, 610, R - L, SIZES, sizeIndex);
 
   // Reasoning effort
-  card(ctx, c, 448, 192);
-  text(ctx, t("effortTitle"), L, 488, { size: 18, weight: 500, color: c.fg });
+  const effortIndex = EFFORTS.indexOf(effort);
+  card(ctx, c, 684, 196);
+  text(ctx, t("effortTitle"), L, 724, { size: 18, weight: 500, color: c.fg });
+  text(ctx, t("tier", { i: effortIndex + 1, n: EFFORTS.length }), R, 724, { size: 13, color: c.muted, align: "right" });
   const ultra = effort === "Ultra";
-  text(ctx, effort, SHARE_W / 2, 536, { size: 30, weight: 500, color: ultra ? c.purple : c.blue, align: "center" });
-  text(ctx, name, SHARE_W / 2, 564, { size: 15, color: c.muted, align: "center" });
-  drawEffortTrack(ctx, c, L, 584, R - L, EFFORTS.indexOf(effort), ultra);
-
-  // Benchmarks
-  const items = BENCHMARKS.flatMap((g) => g.items.map((b) => ({ ...b, weak: g.weak })))
-    .filter((b) => SHARE_BENCH.includes(b.name));
-  card(ctx, c, 656, 76 + items.length * 44);
-  text(ctx, t("shareBench"), L, 696, { size: 18, weight: 500, color: c.fg });
-  items.forEach((b, i) => {
-    const y = 736 + i * 44;
-    text(ctx, b.name, L, y, { size: 14, color: c.fg });
-    text(ctx, b.score, R, y, { size: 14, weight: 500, color: c.fg, align: "right" });
-    pill(ctx, L, y + 10, 5, R - L, 2.5, c.track);
-    pill(ctx, L, y + 10, 5, (R - L) * b.bar, 2.5, b.weak ? c.weak : c.fill);
-  });
+  text(ctx, effort, SHARE_W / 2, 772, { size: 30, weight: 500, color: ultra ? c.purple : c.blue, align: "center" });
+  text(ctx, name, SHARE_W / 2, 800, { size: 15, color: c.muted, align: "center" });
+  drawEffortTrack(ctx, c, L, 820, R - L, effortIndex, ultra);
 
   // Footer
   const stamp = new Date(now + TZ_OFFSET).toISOString().slice(0, 16).replace("T", " ");
