@@ -47,6 +47,31 @@ function drawSeg(ctx, c, x, y, w, labels, active) {
   });
 }
 
+// Wraps by character so it works for Chinese as well as English.
+function wrapText(ctx, str, x, y, maxWidth, lineHeight, opts) {
+  ctx.font = `${opts.weight || 400} ${opts.size}px ${FONT}`;
+  const lines = [];
+  let line = "";
+  for (const ch of str) {
+    if (line && ctx.measureText(line + ch).width > maxWidth) {
+      // Prefer breaking English at the last space.
+      const cut = /\s/.test(ch) ? -1 : line.lastIndexOf(" ");
+      if (cut > 0 && /[A-Za-z]/.test(ch)) {
+        lines.push(line.slice(0, cut));
+        line = line.slice(cut + 1);
+      } else {
+        lines.push(line);
+        line = "";
+      }
+      if (/\s/.test(ch)) continue;
+    }
+    line += ch;
+  }
+  if (line) lines.push(line);
+  lines.forEach((l, i) => text(ctx, l, x, y + i * lineHeight, opts));
+  return lines.length;
+}
+
 function card(ctx, c, y, h) {
   ctx.beginPath();
   ctx.roundRect(36, y, SHARE_W - 72, h, 24);
@@ -71,10 +96,13 @@ function drawShare(ctx, data, now) {
   ctx.fillStyle = c.bg;
   ctx.fillRect(0, 0, SHARE_W, SHARE_H);
 
-  // Header
-  text(ctx, t("eyebrow"), L - 24, 80, { size: 15, color: c.muted });
-  text(ctx, name, L - 24, 128, { size: 42, weight: 600, color: c.fg });
-  text(ctx, t("tagline"), L - 24, 162, { size: 16, color: c.muted });
+  // Header: same text as the page header
+  text(ctx, t("eyebrow"), L - 24, 58, { size: 14, color: c.muted });
+  text(ctx, name, L - 24, 100, { size: 40, weight: 600, color: c.fg });
+  const ledeLines = wrapText(ctx, t("lede", { age: v.major }), L - 24, 130, SHARE_W - 72, 21, { size: 14.5, color: c.muted });
+  // Layout below assumes two-line paragraphs; shift everything down for extra lines.
+  ctx.save();
+  ctx.translate(0, Math.max(0, ledeLines - 2) * 21);
   const pills = [
     [t("size"), size],
     [t("effort"), q.offline ? t("off") : effort],
@@ -96,50 +124,47 @@ function drawShare(ctx, data, now) {
     ctx.font = `500 ${fs}px ${FONT}`;
     const w = w1 + ctx.measureText(value).width + 24;
     ctx.beginPath();
-    ctx.roundRect(px, 182, w, 30, 15);
+    ctx.roundRect(px, 170, w, 30, 15);
     ctx.strokeStyle = c.border;
     ctx.stroke();
-    text(ctx, `${label} · `, px + 12, 202, { size: fs, color: c.muted });
-    text(ctx, value, px + 12 + w1, 202, { size: fs, weight: 500, color: c.fg });
+    text(ctx, `${label} · `, px + 12, 190, { size: fs, color: c.muted });
+    text(ctx, value, px + 12 + w1, 190, { size: fs, weight: 500, color: c.fg });
     px += w + 8;
   }
 
-  // Daily limit, with the sleep level that set it
-  card(ctx, c, 236, 300);
-  text(ctx, t("dailyLimit"), L, 276, { size: 18, weight: 500, color: c.fg });
-  text(ctx, t(q.offline ? "offline" : "online"), R, 276, { size: 14, color: c.muted, align: "right" });
-  const pct = `${Math.floor(q.fraction * 100)}%`;
-  const pw = text(ctx, pct, L, 348, { size: 60, weight: 600, color: c.fg });
-  text(ctx, lang === "zh" ? "剩余" : "left", L + pw + 10, 348, { size: 18, color: c.muted });
-  pill(ctx, L, 368, 12, R - L, 6, c.track);
-  if (q.fraction > 0) pill(ctx, L, 368, 12, Math.max(12, (R - L) * q.fraction), 6, c.fill);
-  text(ctx, `${q.left.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} tokens`, L, 408, { size: 13, color: c.muted });
-  text(ctx, t(q.offline ? "bootsIn" : "resetsIn", { t: formatDuration(q.resetAt - now) }), R, 408,
-    { size: 13, color: c.muted, align: "right" });
+  // Plan limits: daily limit plus the sleep level that set it
+  text(ctx, t("limitsTitle"), L - 24, 242, { size: 20, weight: 500, color: c.fg });
+  const descLines = wrapText(ctx, t("limitsDesc"), L - 24, 266, SHARE_W - 72, 19, { size: 13, color: c.muted });
+  ctx.translate(0, Math.max(0, descLines - 2) * 19);
+  card(ctx, c, 298, 232);
+  text(ctx, t("dailyLimit"), L, 330, { size: 16, weight: 500, color: c.fg });
+  text(ctx, t(q.offline ? "bootsIn" : "resetsIn", { t: formatDuration(q.resetAt - now) }), L, 356, { size: 14, color: c.muted });
+  text(ctx, t("left", { p: Math.floor(q.fraction * 100) }), R, 356, { size: 14, color: c.muted, align: "right" });
+  pill(ctx, L, 368, 10, R - L, 5, c.track);
+  if (q.fraction > 0) pill(ctx, L, 368, 10, Math.max(10, (R - L) * q.fraction), 5, c.fill);
+  text(ctx, `${q.left.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} tokens`, L, 396, { size: 12, color: c.muted });
+  text(ctx, t(q.offline ? "offline" : "online"), R, 396, { size: 12, color: c.muted, align: "right" });
   ctx.fillStyle = c.border;
-  ctx.fillRect(L, 428, R - L, 1);
-  const sleepIndex = Math.round(clamp01(data.sleep) * (SLEEP_STOPS.length - 1));
-  text(ctx, t("sleepTitle"), L, 462, { size: 15, weight: 500, color: c.fg });
-  text(ctx, t("tier", { i: sleepIndex + 1, n: SLEEP_STOPS.length }), R, 462, { size: 13, color: c.muted, align: "right" });
-  drawSeg(ctx, c, L, 478, R - L,
-    SLEEP_STOPS.map((s, i) => `${STRINGS[lang].sleepLevels[i]} · ${formatTokens(dailyTotal(s))}`), sleepIndex);
+  ctx.fillRect(L, 414, R - L, 1);
+  text(ctx, t("sleepTitle"), L, 444, { size: 16, weight: 500, color: c.fg });
+  text(ctx, t("sleepDesc"), L, 464, { size: 12, color: c.muted });
+  drawSeg(ctx, c, L, 476, R - L,
+    SLEEP_STOPS.map((s, i) => `${STRINGS[lang].sleepLevels[i]} · ${formatTokens(dailyTotal(s))}`),
+    Math.round(clamp01(data.sleep) * (SLEEP_STOPS.length - 1)));
 
-  // Model size: all three tiers, current one highlighted
-  const sizeIndex = SIZES.indexOf(size);
-  card(ctx, c, 552, 116);
-  text(ctx, t("sizeTitle"), L, 592, { size: 18, weight: 500, color: c.fg });
-  text(ctx, t("tier", { i: sizeIndex + 1, n: SIZES.length }), R, 592, { size: 13, color: c.muted, align: "right" });
-  drawSeg(ctx, c, L, 610, R - L, SIZES, sizeIndex);
-
-  // Reasoning effort
-  const effortIndex = EFFORTS.indexOf(effort);
-  card(ctx, c, 684, 196);
-  text(ctx, t("effortTitle"), L, 724, { size: 18, weight: 500, color: c.fg });
-  text(ctx, t("tier", { i: effortIndex + 1, n: EFFORTS.length }), R, 724, { size: 13, color: c.muted, align: "right" });
+  // Current configuration: model size and reasoning effort
+  text(ctx, t("configTitle"), L - 24, 572, { size: 20, weight: 500, color: c.fg });
+  card(ctx, c, 588, 292);
+  text(ctx, t("sizeTitle"), L, 620, { size: 16, weight: 500, color: c.fg });
+  text(ctx, t("sizeDesc"), L, 640, { size: 12, color: c.muted });
+  drawSeg(ctx, c, L, 652, R - L, SIZES.map((s) => `Haonan-${v.label}-${s}`), SIZES.indexOf(size));
+  text(ctx, t("effortTitle"), L, 722, { size: 16, weight: 500, color: c.fg });
+  text(ctx, t("effortDesc"), L, 742, { size: 12, color: c.muted });
   const ultra = effort === "Ultra";
-  text(ctx, effort, SHARE_W / 2, 772, { size: 30, weight: 500, color: ultra ? c.purple : c.blue, align: "center" });
-  text(ctx, name, SHARE_W / 2, 800, { size: 15, color: c.muted, align: "center" });
-  drawEffortTrack(ctx, c, L, 820, R - L, effortIndex, ultra);
+  text(ctx, effort, SHARE_W / 2, 780, { size: 26, weight: 500, color: ultra ? c.purple : c.blue, align: "center" });
+  text(ctx, name, SHARE_W / 2, 804, { size: 14, color: c.muted, align: "center" });
+  drawEffortTrack(ctx, c, L, 820, R - L, EFFORTS.indexOf(effort), ultra);
+  ctx.restore();
 
   // Footer
   const stamp = new Date(now + TZ_OFFSET).toISOString().slice(0, 16).replace("T", " ");
