@@ -65,6 +65,7 @@ section { margin-bottom: 48px; }
 .pills { display: flex; flex-wrap: wrap; gap: 8px; }
 .pill { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 14px; color: var(--muted); }
 .pill b { color: var(--fg); font-weight: 500; }
+.updated { margin: 12px 0 0; }
 .card { margin-top: 16px; padding: 24px 28px; border: 1px solid var(--border); border-radius: 20px; background: var(--card); }
 .row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 .title { font-size: 18px; font-weight: 500; }

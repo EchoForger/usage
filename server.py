@@ -49,7 +49,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/status":
-            return self.send_json(200, push_state)
+            return self.send_json(200, {**push_state, "unpushed": brain.unpushed()})
         super().do_GET()
 
     def do_POST(self):

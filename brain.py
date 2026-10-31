@@ -24,14 +24,17 @@ def validate(changes):
         raise ValueError("expected a JSON object")
     clean = {}
     changes = dict(changes)
-    left_at = changes.pop("leftAt", None)
-    if left_at is not None:
-        if "left" not in changes:
-            raise ValueError("leftAt needs left")
-        t = datetime.fromtimestamp(float(left_at) / 1000, BJ)
+    # Client-side timestamps in epoch ms: leftAt (when left was set), at (version stamp).
+    for key in ("leftAt", "at"):
+        ms = changes.pop(key, None)
+        if ms is None:
+            continue
+        t = datetime.fromtimestamp(float(ms) / 1000, BJ)
         if abs((t - datetime.now(BJ)).total_seconds()) > 3600:
-            raise ValueError("leftAt must be within an hour of now")
-        clean["leftAt"] = t.isoformat(timespec="seconds")
+            raise ValueError(f"{key} must be within an hour of now")
+        clean[key] = t
+    if "leftAt" in clean and "left" not in changes:
+        raise ValueError("leftAt needs left")
     for key, value in changes.items():
         if key not in FIELDS:
             raise ValueError(f"unknown field: {key}")
@@ -49,16 +52,18 @@ def update(changes):
     changes = validate(changes)
     with _lock:
         data = read()
-        now = datetime.now(BJ)
+        now = changes.pop("at", None) or datetime.now(BJ)
+        left_at = changes.pop("leftAt", None) or now
         data.update(changes)
         if "sleep" in changes:
             data["sleepDate"] = now.strftime("%Y-%m-%d")
-        if "left" in changes and "leftAt" not in changes:
-            data["leftAt"] = now.isoformat(timespec="seconds")
+        if "left" in changes:
+            data["leftAt"] = left_at.isoformat(timespec="seconds")
         data["updatedAt"] = now.isoformat(timespec="seconds")
         DATA.write_text(json.dumps(data, indent=2) + "\n")
         git("add", "data.json")
-        git("commit", "-q", "-m", "update: " + " ".join(f"{k}={v}" for k, v in changes.items() if k in FIELDS))
+        stamp = now.strftime("%Y-%m-%d %H:%M:%S")
+        git("commit", "-q", "-m", f"update {stamp}: " + " ".join(f"{k}={v}" for k, v in changes.items()))
     return data
 
 
@@ -67,7 +72,8 @@ def push(retries=3):
     with _lock:
         for attempt in range(retries):
             try:
-                result = subprocess.run(["git", "-C", str(ROOT), "push", "-q"],
+                # HTTP/2 to github.com keeps failing on this network; HTTP/1.1 works.
+                result = subprocess.run(["git", "-C", str(ROOT), "-c", "http.version=HTTP/1.1", "push", "-q"],
                                         capture_output=True, text=True, timeout=90)
             except subprocess.TimeoutExpired:
                 error = "git push timed out after 90s"
@@ -78,6 +84,13 @@ def push(retries=3):
             if attempt < retries - 1:
                 time.sleep(3)
     raise RuntimeError(error)
+
+
+def unpushed():
+    """Number of local commits not yet on origin/main."""
+    out = subprocess.run(["git", "-C", str(ROOT), "rev-list", "--count", "origin/main..HEAD"],
+                         capture_output=True, text=True)
+    return int(out.stdout) if out.returncode == 0 else None
 
 
 def git(*args):

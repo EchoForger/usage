@@ -44,7 +44,7 @@ const STRINGS = {
     limitsDesc: "思考、说话、写代码和听音乐共用同一份额度。每天 00:00 到 09:00（UTC+8）停止输出。每日额度由昨晚的睡眠决定。",
     dailyLimit: "每日额度", bootsIn: "{t}后启动", resetsIn: "{t}后重置", left: "剩余 {p}%",
     offline: "离线 · 睡眠中", online: "在线",
-    stale: "今天还没记录睡眠，沿用 {d} 的额度 · ", updated: "{t}前更新",
+    stale: "今天还没记录睡眠，沿用 {d} 的额度 · ", updated: "最近更新 {v}（{t}前）", synced: " · 已同步到 GitHub", unsynced: " · {n} 个版本未推送到 GitHub",
     configTitle: "当前配置",
     sizeTitle: "模型大小", sizeDesc: "由此刻大脑的清醒程度决定。",
     effortTitle: "推理强度", effortDesc: "由此刻想不想深度思考决定。",
@@ -61,8 +61,8 @@ const STRINGS = {
     footer: "Haonan 不是 OpenAI 的产品。出生于 2001-08-10。",
     sleepTitle: "昨晚睡眠", sleepDesc: "决定今天的 Token 总量。",
     sleepLevels: ["很差", "较差", "一般", "不错", "很好"],
-    publishIn: "{s} 秒后自动发布", saving: "正在保存…", pushing: "已保存，正在推送到 GitHub（网络慢时可能要几分钟）…",
-    pushed: "已发布，线上页面几分钟内更新。", pushFailed: "已保存到本地，但推送失败：{e}", saveFailed: "保存失败：{e}",
+    publishIn: "{s} 秒后发布版本 {v}", saving: "正在保存版本 {v}…", pushing: "版本 {v} 已保存，正在推送到 GitHub…",
+    pushed: "版本 {v} 已发布，线上页面几分钟内更新。", pushFailed: "版本 {v} 已保存到本地，但推送失败：{e}", saveFailed: "版本 {v} 保存失败：{e}",
     dur: (d, h, m) => (d > 0 ? `${d} 天 ${h} 小时` : h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`),
   },
   en: {
@@ -75,7 +75,7 @@ const STRINGS = {
     limitsDesc: "Shared across thinking, talking, coding, and listening. Output is disabled from 00:00 to 09:00 (UTC+8). Daily budget is set by last night's sleep.",
     dailyLimit: "Daily limit", bootsIn: "Boots in {t}", resetsIn: "Resets in {t}", left: "{p}% left",
     offline: "Offline · sleeping", online: "Online",
-    stale: "Sleep not logged today, using {d} · ", updated: "Updated {t} ago",
+    stale: "Sleep not logged today, using {d} · ", updated: "Last updated {v} ({t} ago)", synced: " · Synced to GitHub", unsynced: " · {n} version(s) not pushed to GitHub",
     configTitle: "Current configuration",
     sizeTitle: "Model size", sizeDesc: "Set by how awake the brain is right now.",
     effortTitle: "Reasoning effort", effortDesc: "Set by how much it wants to think deeply right now.",
@@ -92,8 +92,8 @@ const STRINGS = {
     footer: "Haonan is not an OpenAI product. Born 2001-08-10.",
     sleepTitle: "Last night's sleep", sleepDesc: "Sets today's token budget.",
     sleepLevels: ["Poor", "Fair", "OK", "Good", "Great"],
-    publishIn: "Publishing in {s}s", saving: "Saving…", pushing: "Saved. Pushing to GitHub (may take a few minutes on a slow network)…",
-    pushed: "Published. The public page updates within a few minutes.", pushFailed: "Saved locally, but push failed: {e}", saveFailed: "Save failed: {e}",
+    publishIn: "Publishing version {v} in {s}s", saving: "Saving version {v}…", pushing: "Version {v} saved. Pushing to GitHub…",
+    pushed: "Version {v} published. The public page updates within a few minutes.", pushFailed: "Version {v} saved locally, but push failed: {e}", saveFailed: "Version {v} failed to save: {e}",
     dur: (d, h, m) => (d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`),
   },
 };
@@ -116,6 +116,11 @@ function bjParts(now) {
 
 function bjDateString(now) {
   return new Date(now + TZ_OFFSET).toISOString().slice(0, 10);
+}
+
+// Version stamp: Beijing date and time to the second, e.g. 2026-10-31 14:23:05.
+function formatStamp(ms) {
+  return new Date(ms + TZ_OFFSET).toISOString().slice(0, 19).replace("T", " ");
 }
 
 function version(now) {
@@ -253,7 +258,9 @@ function render(data) {
   const stale = data.sleepDate !== bjDateString(now) && !q.offline;
   const updated = new Date(data.updatedAt);
   $("updated-text").textContent =
-    (stale ? t("stale", { d: data.sleepDate }) : "") + t("updated", { t: formatDuration(now - updated.getTime()) });
+    (stale ? t("stale", { d: data.sleepDate }) : "") +
+    t("updated", { v: formatStamp(updated.getTime()), t: formatDuration(now - updated.getTime()) }) +
+    (sync === null ? "" : sync === 0 ? t("synced") : t("unsynced", { n: sync }));
 
   const specs = [
     [t("kVersion"), t("vVersion", { v: v.label })],
@@ -274,6 +281,8 @@ async function main() {
   draft = { ...saved };
   render(draft);
   setInterval(() => { render(draft); renderToast(); }, 1000);
+  refreshSync();
+  setInterval(refreshSync, 15000);
   $("lang-toggle").addEventListener("click", () => {
     lang = lang === "zh" ? "en" : "zh";
     localStorage.setItem("lang", lang);
@@ -290,6 +299,7 @@ let touched = new Set(); // fields clicked since the last publish
 let timer = null; // pending publish
 let deadline = 0;
 let status = null; // [key, vars] shown in the toast
+let sync = null; // unpushed commit count, known only on localhost
 
 function pendingChanges() {
   const changes = {};
@@ -308,6 +318,7 @@ function bucketValue(i, n) {
 
 function setupEditing() {
   document.body.classList.add("editable");
+  refreshSync();
   const pick = (key, value) => (e) => {
     const i = e.target.closest("[data-i]")?.dataset.i;
     if (i !== undefined) edit(key, value(Number(i)));
@@ -348,7 +359,7 @@ function edit(key, value) {
 
 function renderToast() {
   const text = timer
-    ? t("publishIn", { s: Math.max(0, Math.ceil((deadline - Date.now()) / 1000)) })
+    ? t("publishIn", { s: Math.max(0, Math.ceil((deadline - Date.now()) / 1000)), v: formatStamp(deadline) })
     : status ? t(...status) : "";
   $("toast").hidden = !text;
   $("toast").textContent = text;
@@ -358,8 +369,11 @@ async function publish(leaving = false) {
   clearTimeout(timer);
   timer = null;
   const changes = pendingChanges();
+  const at = leaving ? Date.now() : deadline;
+  const v = formatStamp(at);
+  changes.at = at;
   touched = new Set();
-  status = ["saving"];
+  status = ["saving", { v }];
   renderToast();
   try {
     const res = await fetch("/api/update", {
@@ -372,24 +386,39 @@ async function publish(leaving = false) {
     if (!res.ok) throw new Error(body.error);
     saved = body.data;
     if (!timer) draft = { ...saved };
-    status = ["pushing"];
+    status = ["pushing", { v }];
   } catch (e) {
-    status = ["saveFailed", { e: e.message }];
+    status = ["saveFailed", { v, e: e.message }];
     return renderToast();
   }
   render(draft);
-  pollPush();
+  pollPush(v);
 }
 
-async function pollPush() {
+async function fetchStatus() {
+  return (await fetch("/api/status", { cache: "no-store" })).json();
+}
+
+async function refreshSync() {
+  if (!document.body.classList.contains("editable")) return;
+  try {
+    sync = (await fetchStatus()).unpushed;
+  } catch {
+    sync = null;
+  }
+}
+
+async function pollPush(v) {
   let s;
   try {
-    s = await (await fetch("/api/status", { cache: "no-store" })).json();
+    s = await fetchStatus();
   } catch {
-    return setTimeout(pollPush, 2000);
+    return setTimeout(() => pollPush(v), 2000);
   }
-  if (s.state === "pushing") return setTimeout(pollPush, 2000);
-  status = s.state === "pushed" ? ["pushed"] : ["pushFailed", { e: s.error }];
+  if (s.state === "pushing") return setTimeout(() => pollPush(v), 2000);
+  sync = s.unpushed;
+  status = s.state === "pushed" ? ["pushed", { v }] : ["pushFailed", { v, e: s.error }];
+  render(draft);
   renderToast();
   if (s.state === "pushed") {
     setTimeout(() => { if (status && status[0] === "pushed") status = null; }, 5000);
