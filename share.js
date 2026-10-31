@@ -275,18 +275,73 @@ async function exportImage() {
   button.disabled = true;
   button.textContent = t("exporting");
   try {
-    const canvas = shareCanvas(draft);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 1));
     const v = version(Date.now());
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `Haonan-${v.label}-${bucket(draft.clarity, SIZES)}-${bjDateString(Date.now())}.jpg`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    await download(shareCanvas(draft), `Haonan-${v.label}-${bucket(draft.clarity, SIZES)}-${bjDateString(Date.now())}.jpg`);
   } finally {
     button.disabled = false;
     button.textContent = t("export");
   }
 }
 
-if (typeof document !== "undefined") $("export-button").addEventListener("click", exportImage);
+// Full-page export: copy every element's computed style inline, wrap the page in an SVG
+// foreignObject and rasterize it at 2x, so the image matches what this window shows.
+const PAGE_SCALE = 2;
+
+function inlineStyles(src, dst) {
+  const cs = getComputedStyle(src);
+  let css = "";
+  for (let i = 0; i < cs.length; i++) css += `${cs[i]}:${cs.getPropertyValue(cs[i])};`;
+  dst.setAttribute("style", css);
+  for (let i = 0; i < src.children.length; i++) inlineStyles(src.children[i], dst.children[i]);
+}
+
+async function pageCanvas() {
+  const w = document.documentElement.clientWidth;
+  const h = document.documentElement.scrollHeight;
+  const clone = document.body.cloneNode(true);
+  // Finish running transitions so bars and the effort knob are captured at their final values.
+  document.documentElement.classList.add("capturing");
+  inlineStyles(document.body, clone);
+  document.documentElement.classList.remove("capturing");
+  const root = document.createElement("div");
+  root.setAttribute("style", `${clone.getAttribute("style")}width:${w}px;height:${h}px;margin:0;`);
+  root.append(...clone.childNodes);
+  root.querySelectorAll(".top-actions, #toast, script").forEach((el) => el.remove());
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w * PAGE_SCALE}" height="${h * PAGE_SCALE}" viewBox="0 0 ${w} ${h}">` +
+    `<foreignObject x="0" y="0" width="${w}" height="${h}">${new XMLSerializer().serializeToString(root)}</foreignObject></svg>`;
+  const img = new Image();
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  await img.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = w * PAGE_SCALE;
+  canvas.height = h * PAGE_SCALE;
+  canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+async function download(canvas, filename) {
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 1));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function exportPage() {
+  const button = $("export-page-button");
+  button.disabled = true;
+  button.textContent = t("exporting");
+  try {
+    const v = version(Date.now());
+    await download(await pageCanvas(), `Haonan-${v.label}-${bucket(draft.clarity, SIZES)}-page-${bjDateString(Date.now())}.jpg`);
+  } finally {
+    button.disabled = false;
+    button.textContent = t("exportPage");
+  }
+}
+
+if (typeof document !== "undefined") {
+  $("export-button").addEventListener("click", exportImage);
+  $("export-page-button").addEventListener("click", exportPage);
+}

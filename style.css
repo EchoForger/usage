@@ -80,12 +80,20 @@ section { margin-bottom: 48px; }
 .specs { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 32px; }
 .specs div span { display: block; }
 .specs .k { font-size: 13px; color: var(--muted); }
-.bench { display: grid; grid-template-columns: 1fr 72px; gap: 4px 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
-.bench .name { font-size: 15px; }
-.bench .desc { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
-.bench .score { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
-.bench .bar { grid-column: 1 / -1; height: 6px; margin: 4px 0 0; }
-.bench.weak .bar > div { background: var(--weak); }
+#benchmarks {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px 32px; margin-top: 16px; padding: 20px 24px;
+  border: 1px solid var(--border); border-radius: 20px; background: var(--card);
+}
+.bench-head { display: flex; flex-direction: column; margin-bottom: 6px; }
+.bench-head b { font-size: 15px; font-weight: 500; }
+.bench-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px 44px; gap: 10px; align-items: center; padding: 3px 0; font-size: 13px; cursor: default; }
+.bench-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bench-row .bar { display: block; height: 5px; margin: 0; border-radius: 3px; background: var(--track); overflow: hidden; }
+.bench-row .bar > span { display: block; height: 100%; border-radius: 3px; background: var(--fill); }
+.bench-row .score { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+.bench-group.weak .bar > span { background: var(--weak); }
+.part { margin: 64px 0 8px; padding-top: 32px; border-top: 1px solid var(--border); }
+.part .eyebrow { margin: 0; font-size: 14px; }
 
 /* Reasoning effort slider: knob snaps to one of five stops (--pos from 0 to 1). */
 .effort { --pos: 0; --r: 24px; --blue: #2f6bd6; --purple: #a46cf0; padding: 4px 0 0; text-align: center; }
@@ -139,6 +147,8 @@ section { margin-bottom: 48px; }
   .sparkles i { opacity: var(--peak); }
 }
 footer { padding-top: 24px; border-top: 1px solid var(--border); }
+
+.capturing * { transition: none !important; }
 
 /* Biological NPU */
 .tag {
@@ -201,5 +211,6 @@ footer { padding-top: 24px; border-top: 1px solid var(--border); }
   .seg span { min-width: 0; padding: 8px 2px; border-radius: 12px; white-space: normal; overflow-wrap: anywhere; }
   .gpu-tiles, #gpu-gen-detail .gpu-tiles { grid-template-columns: 1fr 1fr; }
   .gpu-name { font-size: 30px; }
+  #benchmarks { grid-template-columns: 1fr; padding: 16px 18px; }
   .gpu-details .specs { grid-template-columns: 1fr 1fr; gap: 16px 20px; }
 }

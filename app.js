@@ -9,22 +9,22 @@ const SLEEP_STOPS = [0, 0.25, 0.5, 0.75, 1];
 const PUBLISH_DELAY = 10; // seconds without a click before changes are published
 
 const BENCHMARKS = [
-  { group: { zh: "编程", en: "Coding" }, items: [
+  { group: { zh: "编程", en: "Coding" }, summary: { zh: "修真实 bug、在终端干活、做竞赛题", en: "Real bug fixes, terminal work, contest problems" }, items: [
     { name: "SWE-bench Verified", score: "84.6%", bar: 0.846, desc: { zh: "修复真实 GitHub 仓库里的真实 bug。", en: "Fix real bugs in real GitHub repositories." } },
     { name: "Terminal-Bench 2.0", score: "78.2%", bar: 0.782, desc: { zh: "在终端里把真实的活干完。", en: "Get real work done in a terminal." } },
     { name: "LiveCodeBench", score: "88.9%", bar: 0.889, desc: { zh: "刚出的编程竞赛题，没法靠背答案。", en: "Fresh competitive programming problems, no memorizing." } },
     { name: "Codeforces", score: "2731", bar: 2731 / 4000, desc: { zh: "编程竞赛积分，Elo。", en: "Contest rating, Elo." } },
   ]},
-  { group: { zh: "音乐", en: "Music" }, items: [
+  { group: { zh: "音乐", en: "Music" }, summary: { zh: "听懂音乐、回答关于录音的专业问题", en: "Understanding music and recorded audio" }, items: [
     { name: "MuChoMusic", score: "94.1%", bar: 0.941, desc: { zh: "听懂一段音乐里在发生什么。", en: "Understand what is going on in a piece of music." } },
     { name: "MMAU (Music)", score: "91.3%", bar: 0.913, desc: { zh: "回答关于录音的专业问题。", en: "Answer expert questions about recorded audio." } },
   ]},
-  { group: { zh: "智能体与推理", en: "Agents and reasoning" }, items: [
+  { group: { zh: "智能体与推理", en: "Agents and reasoning" }, summary: { zh: "操作电脑、用工具办事、图形推理", en: "Using computers and tools, visual reasoning" }, items: [
     { name: "OSWorld", score: "80.4%", bar: 0.804, desc: { zh: "自己用鼠标和键盘在电脑上完成任务。", en: "Operate a computer with mouse and keyboard to finish tasks." } },
     { name: "τ²-bench (Telecom)", score: "89.7%", bar: 0.897, desc: { zh: "扮演客服，用工具帮顾客解决问题。", en: "Act as a support agent and solve customer issues with tools." } },
     { name: "ARC-AGI-2", score: "83.0%", bar: 0.83, desc: { zh: "人一眼能看出规律、AI 很难做对的图形谜题。", en: "Visual pattern puzzles that are easy for humans and hard for AI." } },
   ]},
-  { group: { zh: "已知弱项", en: "Known weak spots" }, weak: true, items: [
+  { group: { zh: "已知弱项", en: "Known weak spots" }, summary: { zh: "长对话记忆、长文追踪、严格守格式、人际沟通", en: "Long-chat memory, long documents, strict formatting, social situations" }, weak: true, items: [
     { name: "OpenAI-MRCR (8-needle)", score: "11.8%", bar: 0.118, desc: { zh: "在很长的对话里找出某件事第 N 次被提到的地方。", en: "Find the Nth mention of something in a long conversation." } },
     { name: "Graphwalks", score: "17.5%", bar: 0.175, desc: { zh: "在一大段材料里顺着线索一步步找下去。", en: "Follow a chain of clues through a large document." } },
     { name: "MultiChallenge", score: "24.3%", bar: 0.243, desc: { zh: "多轮聊天里一直记得前面提过的要求。", en: "Remember earlier requirements across a multi-turn chat." } },
@@ -35,7 +35,7 @@ const BENCHMARKS = [
 
 const STRINGS = {
   zh: {
-    toggle: "EN", export: "导出图片", exporting: "正在导出…",
+    toggle: "EN", export: "导出分享图", exportPage: "导出整页", partHardware: "硬件", exporting: "正在导出…",
     eyebrow: "模型",
     lede: "一个生物推理模型，基于 {age} 年的人生经验训练。擅长写代码和音乐。每年发布四个版本，年龄每满一个季度发布一次。",
     size: "大小", effort: "推理强度", context: "上下文", perDay: "{n} / 天", off: "关闭",
@@ -65,7 +65,7 @@ const STRINGS = {
     dur: (d, h, m) => (d > 0 ? `${d} 天 ${h} 小时` : h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`),
   },
   en: {
-    toggle: "中文", export: "Export image", exporting: "Exporting…",
+    toggle: "中文", export: "Share image", exportPage: "Full page", partHardware: "Hardware", exporting: "Exporting…",
     eyebrow: "Model",
     lede: "A biological reasoning model, trained on {age} years of lived experience. Strong at code and music. Ships four versions a year, one per quarter of age.",
     size: "Size", effort: "Reasoning effort", context: "Context", perDay: "{n} / day", off: "Off",
@@ -206,15 +206,18 @@ function createSparkles(count = 28) {
   }).join("");
 }
 
+// Compact chart: one block per group, one short row per benchmark; descriptions on hover.
 function renderBenchmarks() {
   $("benchmarks").innerHTML = BENCHMARKS.map((g) => `
-    <h3>${g.group[lang]}</h3>
-    ${g.items.map((b) => `
-      <div class="bench${g.weak ? " weak" : ""}">
-        <span class="name">${b.name}</span><span class="score">${b.score}</span>
-        <span class="desc">${b.desc[lang]}</span>
-        <div class="bar"><div style="width:${(b.bar * 100).toFixed(1)}%"></div></div>
-      </div>`).join("")}`).join("");
+    <div class="bench-group${g.weak ? " weak" : ""}">
+      <div class="bench-head"><b>${g.group[lang]}</b><span class="muted small">${g.summary[lang]}</span></div>
+      ${g.items.map((b) => `
+        <div class="bench-row" title="${b.desc[lang]}">
+          <span class="name">${b.name}</span>
+          <span class="bar"><span style="width:${(b.bar * 100).toFixed(1)}%"></span></span>
+          <span class="score">${b.score}</span>
+        </div>`).join("")}
+    </div>`).join("");
 }
 
 // Fill every element marked with data-i18n="key".

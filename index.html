@@ -9,6 +9,7 @@
 </head>
 <body>
 <div class="top-actions">
+  <button id="export-page-button" class="lang-toggle" type="button" data-i18n="exportPage"></button>
   <button id="export-button" class="lang-toggle" type="button" data-i18n="export"></button>
   <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="toggle">EN</button>
 </div>
@@ -68,6 +69,20 @@
   </section>
 
   <section>
+    <h2 data-i18n="detailsTitle"></h2>
+    <div class="card specs" id="specs"></div>
+  </section>
+
+  <section>
+    <h2 data-i18n="benchTitle"></h2>
+    <p class="muted" data-i18n="benchDesc"></p>
+    <div id="benchmarks"></div>
+    <p class="muted small" data-i18n="benchNote"></p>
+  </section>
+
+  <div class="part"><p class="eyebrow" data-i18n="partHardware"></p></div>
+
+  <section>
     <h2 data-i18n="gpuTitle"></h2>
     <p class="muted" data-i18n="gpuDesc"></p>
     <div class="card gpu-card">
@@ -103,18 +118,6 @@
     <div class="card" id="gpu-gen-detail"></div>
     <h3 data-i18n="compareTitle"></h3>
     <div class="table-wrap"><table class="compare" id="gpu-compare"></table></div>
-  </section>
-
-  <section>
-    <h2 data-i18n="detailsTitle"></h2>
-    <div class="card specs" id="specs"></div>
-  </section>
-
-  <section>
-    <h2 data-i18n="benchTitle"></h2>
-    <p class="muted" data-i18n="benchDesc"></p>
-    <div id="benchmarks"></div>
-    <p class="muted small" data-i18n="benchNote"></p>
   </section>
 
   <footer class="muted small" data-i18n="footer"></footer>
