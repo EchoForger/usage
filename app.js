@@ -44,7 +44,7 @@ const STRINGS = {
     limitsDesc: "思考、说话、写代码和听音乐共用同一份额度。每天 00:00 到 09:00（UTC+8）停止输出。每日额度由昨晚的睡眠决定。",
     dailyLimit: "每日额度", bootsIn: "{t}后启动", resetsIn: "{t}后重置", left: "剩余 {p}%",
     offline: "离线 · 睡眠中", online: "在线",
-    stale: "今天还没记录睡眠，沿用 {d} 的额度 · ", updated: "最近更新 {v}（{t}前）", synced: " · 已同步到 GitHub", unsynced: " · {n} 个版本未推送到 GitHub",
+    stale: "今天还没记录睡眠，沿用 {d} 的额度 · ", updated: "最近更新 {v}（{t}前）", synced: "· 已同步到 GitHub", unsynced: "· {n} 个版本未推送到 GitHub",
     configTitle: "当前配置",
     sizeTitle: "模型大小", sizeDesc: "由此刻大脑的清醒程度决定。",
     effortTitle: "推理强度", effortDesc: "由此刻想不想深度思考决定。",
