@@ -35,12 +35,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 main { max-width: 760px; margin: 0 auto; padding: 64px 24px 48px; }
+.top-actions { position: fixed; top: 16px; right: 16px; z-index: 1; display: flex; gap: 8px; }
 .lang-toggle {
-  position: fixed; top: 16px; right: 16px; z-index: 1;
   padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px;
   background: var(--bg); color: var(--fg); font: inherit; font-size: 14px; cursor: pointer;
 }
 .lang-toggle:hover { background: var(--seg); }
+.lang-toggle:disabled { opacity: .5; cursor: default; }
 .limit + .config { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border); }
 /* Only the localhost page is editable. */
 .editable .seg span, .editable .effort-track, .editable .bar-hit { cursor: pointer; }

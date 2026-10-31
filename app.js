@@ -35,7 +35,8 @@ const BENCHMARKS = [
 
 const STRINGS = {
   zh: {
-    toggle: "EN",
+    toggle: "EN", export: "导出图片", exporting: "正在导出…",
+    tagline: "擅长写代码和音乐的生物推理模型。", shareBench: "基准测试精选",
     eyebrow: "模型",
     lede: "一个生物推理模型，基于 {age} 年的人生经验训练。擅长写代码和音乐。每年发布四个版本，年龄每满一个季度发布一次。",
     size: "大小", effort: "推理强度", context: "上下文", perDay: "{n} / 天", off: "关闭",
@@ -65,7 +66,8 @@ const STRINGS = {
     dur: (d, h, m) => (d > 0 ? `${d} 天 ${h} 小时` : h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`),
   },
   en: {
-    toggle: "中文",
+    toggle: "中文", export: "Export image", exporting: "Exporting…",
+    tagline: "A biological reasoning model, strong at code and music.", shareBench: "Benchmark highlights",
     eyebrow: "Model",
     lede: "A biological reasoning model, trained on {age} years of lived experience. Strong at code and music. Ships four versions a year, one per quarter of age.",
     size: "Size", effort: "Reasoning effort", context: "Context", perDay: "{n} / day", off: "Off",

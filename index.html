@@ -8,7 +8,10 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<button id="lang-toggle" class="lang-toggle" type="button" data-i18n="toggle">EN</button>
+<div class="top-actions">
+  <button id="export-button" class="lang-toggle" type="button" data-i18n="export"></button>
+  <button id="lang-toggle" class="lang-toggle" type="button" data-i18n="toggle">EN</button>
+</div>
 <main>
   <header>
     <p class="eyebrow" data-i18n="eyebrow"></p>
@@ -80,5 +83,6 @@
 </main>
 <div class="toast" id="toast" hidden></div>
 <script src="app.js"></script>
+<script src="share.js"></script>
 </body>
 </html>
