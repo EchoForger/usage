@@ -254,6 +254,7 @@ function render(data) {
     Math.round(clamp01(data.sleep) * (SLEEP_STOPS.length - 1)));
   renderSeg($("seg-size"), SIZES.map((s) => `Haonan-${v.label}-${s}`), SIZES.indexOf(size));
   renderEffort(effort, name);
+  renderGPU(data, now, q, size, effort, name);
 
   const stale = data.sleepDate !== bjDateString(now) && !q.offline;
   const updated = new Date(data.updatedAt);
@@ -425,4 +426,5 @@ async function pollPush(v) {
   }
 }
 
-if (typeof document !== "undefined") main();
+// Run after gpu.js and share.js have loaded; they add strings and render hooks.
+if (typeof document !== "undefined") addEventListener("DOMContentLoaded", main);

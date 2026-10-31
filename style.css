@@ -139,6 +139,59 @@ section { margin-bottom: 48px; }
   .sparkles i { opacity: var(--peak); }
 }
 footer { padding-top: 24px; border-top: 1px solid var(--border); }
+
+/* Biological GPU */
+.tag {
+  display: inline-block; margin-left: 4px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 11px; font-weight: 400; line-height: 18px; color: var(--muted); vertical-align: middle; cursor: help;
+}
+.gpu-head { align-items: flex-start; }
+.gpu-name { font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.gpu-status { padding: 4px 12px; border-radius: 999px; background: #2f6bd6; color: #fff; font-size: 13px; font-weight: 500; }
+.gpu-status.asleep { background: var(--seg); color: var(--muted); }
+.gpu-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
+.gpu-tile { padding: 12px 14px; border-radius: 14px; background: var(--seg); }
+.gpu-tile .k { display: block; font-size: 12px; color: var(--muted); }
+.gpu-tile b { display: block; margin: 2px 0 4px; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gpu-tile .tag { margin-left: 0; }
+.gpu-runtime { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.gpu-runtime b { font-variant-numeric: tabular-nums; }
+.gpu-runtime .row.small { margin-top: 8px; gap: 12px; }
+.gpu-runtime .row.small span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+#gpu-util-bar { background: #2f6bd6; }
+.gpu-details { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.gpu-details summary { cursor: pointer; font-weight: 500; }
+.gpu-details .specs { margin-top: 16px; }
+.specs .tag { display: inline-block; }
+.timeline { display: flex; gap: 8px; margin-top: 16px; overflow-x: auto; padding-bottom: 4px; }
+.tl-node {
+  flex: 1 0 112px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 16px;
+  background: var(--card); color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+}
+.tl-node:hover { background: var(--seg); }
+.tl-node.planned { border-style: dashed; }
+.tl-node.current { border-color: #2f6bd6; }
+.tl-node.selected { box-shadow: inset 0 0 0 1px var(--fg); border-color: var(--fg); }
+.tl-year, .tl-arch, .tl-status { font-size: 12px; color: var(--muted); }
+.tl-node.current .tl-status { color: #2f6bd6; font-weight: 500; }
+.tl-dot { width: 8px; height: 8px; margin: 4px 0; border-radius: 50%; background: var(--weak); }
+.tl-node.current .tl-dot { background: #2f6bd6; }
+.badge { padding: 2px 10px; border-radius: 999px; background: var(--seg); color: var(--muted); font-size: 12px; white-space: nowrap; }
+.badge.current { background: #2f6bd6; color: #fff; }
+#gpu-gen-detail p { margin: 8px 0; }
+#gpu-gen-detail .gpu-tiles { grid-template-columns: repeat(5, 1fr); gap: 8px; }
+#gpu-gen-detail .gpu-tile { padding: 10px 12px; }
+#gpu-gen-detail .gpu-tile b { font-size: 15px; }
+.traits { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+.link { margin-top: 16px; padding: 0; border: 0; background: none; color: #2f6bd6; font: inherit; font-size: 14px; cursor: pointer; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 16px; }
+.compare { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.compare th, .compare td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.compare tbody tr:last-child th, .compare tbody tr:last-child td { border-bottom: 0; }
+.compare tbody th { color: var(--muted); font-weight: 400; white-space: nowrap; }
+.compare thead td { font-weight: 600; }
+.compare td.current { background: color-mix(in srgb, #2f6bd6 10%, transparent); }
 @media (max-width: 560px) {
   h1 { font-size: 32px; }
   .card { padding: 20px; }
@@ -146,4 +199,7 @@ footer { padding-top: 24px; border-top: 1px solid var(--border); }
   .seg span { font-size: 12px; }
   .seg { border-radius: 16px; }
   .seg span { min-width: 0; padding: 8px 2px; border-radius: 12px; white-space: normal; overflow-wrap: anywhere; }
+  .gpu-tiles, #gpu-gen-detail .gpu-tiles { grid-template-columns: 1fr 1fr; }
+  .gpu-name { font-size: 30px; }
+  .gpu-details .specs { grid-template-columns: 1fr 1fr; gap: 16px 20px; }
 }

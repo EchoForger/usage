@@ -68,6 +68,44 @@
   </section>
 
   <section>
+    <h2 data-i18n="gpuTitle"></h2>
+    <p class="muted" data-i18n="gpuDesc"></p>
+    <div class="card gpu-card">
+      <div class="row gpu-head">
+        <div>
+          <div class="gpu-name" id="gpu-name">—</div>
+          <div class="muted small" id="gpu-arch">—</div>
+        </div>
+        <span class="gpu-status" id="gpu-status">—</span>
+      </div>
+      <div class="gpu-tiles" id="gpu-tiles"></div>
+      <div class="gpu-runtime">
+        <div class="row"><span><span data-i18n="kUtil"></span> <span class="tag" data-i18n="tagSimulated"></span></span><b id="gpu-util">—</b></div>
+        <div class="bar"><div id="gpu-util-bar"></div></div>
+        <div class="row small"><span class="muted"><span data-i18n="kEffective"></span> <span class="tag" data-i18n="tagSimulated"></span></span><span id="gpu-effective">—</span></div>
+        <div class="row small"><span class="muted" data-i18n="kRunning"></span><span id="gpu-model">—</span></div>
+        <div class="row small"><span class="muted" data-i18n="kNextGen"></span><span id="gpu-next">—</span></div>
+        <p class="muted small" id="gpu-sleep-note" data-i18n="sleepNote" hidden></p>
+      </div>
+      <details class="gpu-details">
+        <summary data-i18n="detailsSummary"></summary>
+        <div class="specs" id="gpu-spec-list"></div>
+        <p class="muted small" data-i18n="runtimeNote"></p>
+        <p class="muted small" data-i18n="specNote"></p>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-i18n="tlTitle"></h2>
+    <p class="muted" data-i18n="tlDesc"></p>
+    <div class="timeline" id="gpu-timeline"></div>
+    <div class="card" id="gpu-gen-detail"></div>
+    <h3 data-i18n="compareTitle"></h3>
+    <div class="table-wrap"><table class="compare" id="gpu-compare"></table></div>
+  </section>
+
+  <section>
     <h2 data-i18n="detailsTitle"></h2>
     <div class="card specs" id="specs"></div>
   </section>
@@ -83,6 +121,7 @@
 </main>
 <div class="toast" id="toast" hidden></div>
 <script src="app.js"></script>
+<script src="gpu.js"></script>
 <script src="share.js"></script>
 </body>
 </html>
