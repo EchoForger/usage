@@ -90,25 +90,75 @@ function drawShare(ctx, data, now) {
   const total = dailyTotal(data.sleep);
   const q = quota(now, total, data.left, data.leftAt);
   const name = `Haonan-${v.label}-${size}`;
-  const L = 60; // inner left edge
-  const R = SHARE_W - 60; // inner right edge
+  const L = 60; // inner left edge of cards
+  const R = SHARE_W - 60; // inner right edge of cards
+  const X = L - 24; // left edge of text outside cards
 
   ctx.fillStyle = c.bg;
   ctx.fillRect(0, 0, SHARE_W, SHARE_H);
 
-  // Header: same text as the page header
-  text(ctx, t("eyebrow"), L - 24, 58, { size: 14, color: c.muted });
-  text(ctx, name, L - 24, 100, { size: 40, weight: 600, color: c.fg });
-  const ledeLines = wrapText(ctx, t("lede", { age: v.major }), L - 24, 130, SHARE_W - 72, 21, { size: 14.5, color: c.muted });
-  // Layout below assumes two-line paragraphs; shift everything down for extra lines.
-  ctx.save();
-  ctx.translate(0, Math.max(0, ledeLines - 2) * 21);
-  const pills = [
+  // Header: same text as the page header. y is a cursor so wrapped paragraphs push content down.
+  text(ctx, t("eyebrow"), X, 46, { size: 14, color: c.muted });
+  text(ctx, name, X, 86, { size: 40, weight: 600, color: c.fg });
+  let y = 114;
+  y += (wrapText(ctx, t("lede", { age: v.major }), X, y, SHARE_W - 72, 20, { size: 14.5, color: c.muted }) - 1) * 20;
+  y = drawPills(ctx, c, X, y + 14, [
     [t("size"), size],
     [t("effort"), q.offline ? t("off") : effort],
     [t("context"), t("perDay", { n: formatTokens(total) })],
-  ];
-  // Shrink the pill text if the row would not fit between the margins.
+  ]);
+
+  // Plan limits: daily limit plus the sleep level that set it
+  y += 36;
+  text(ctx, t("limitsTitle"), X, y, { size: 20, weight: 500, color: c.fg });
+  y += 22;
+  y += (wrapText(ctx, t("limitsDesc"), X, y, SHARE_W - 72, 19, { size: 13, color: c.muted }) - 1) * 19;
+  let T = y + 12;
+  card(ctx, c, T, 218);
+  text(ctx, t("dailyLimit"), L, T + 30, { size: 16, weight: 500, color: c.fg });
+  text(ctx, t(q.offline ? "bootsIn" : "resetsIn", { t: formatDuration(q.resetAt - now) }), L, T + 54, { size: 14, color: c.muted });
+  text(ctx, t("left", { p: Math.floor(q.fraction * 100) }), R, T + 54, { size: 14, color: c.muted, align: "right" });
+  pill(ctx, L, T + 64, 10, R - L, 5, c.track);
+  if (q.fraction > 0) pill(ctx, L, T + 64, 10, Math.max(10, (R - L) * q.fraction), 5, c.fill);
+  text(ctx, `${q.left.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} tokens`, L, T + 92, { size: 12, color: c.muted });
+  text(ctx, t(q.offline ? "offline" : "online"), R, T + 92, { size: 12, color: c.muted, align: "right" });
+  ctx.fillStyle = c.border;
+  ctx.fillRect(L, T + 108, R - L, 1);
+  text(ctx, t("sleepTitle"), L, T + 134, { size: 16, weight: 500, color: c.fg });
+  text(ctx, t("sleepDesc"), L, T + 152, { size: 12, color: c.muted });
+  drawSeg(ctx, c, L, T + 162, R - L,
+    SLEEP_STOPS.map((s, i) => `${STRINGS[lang].sleepLevels[i]} · ${formatTokens(dailyTotal(s))}`),
+    Math.round(clamp01(data.sleep) * (SLEEP_STOPS.length - 1)));
+  y = T + 218;
+
+  // Current configuration: model size and reasoning effort
+  y += 32;
+  text(ctx, t("configTitle"), X, y, { size: 20, weight: 500, color: c.fg });
+  T = y + 14;
+  card(ctx, c, T, 246);
+  text(ctx, t("sizeTitle"), L, T + 30, { size: 16, weight: 500, color: c.fg });
+  text(ctx, t("sizeDesc"), L, T + 48, { size: 12, color: c.muted });
+  drawSeg(ctx, c, L, T + 58, R - L, SIZES.map((s) => `Haonan-${v.label}-${s}`), SIZES.indexOf(size));
+  text(ctx, t("effortTitle"), L, T + 124, { size: 16, weight: 500, color: c.fg });
+  text(ctx, t("effortDesc"), L, T + 142, { size: 12, color: c.muted });
+  const ultra = effort === "Ultra";
+  text(ctx, effort, SHARE_W / 2, T + 176, { size: 24, weight: 500, color: ultra ? c.purple : c.blue, align: "center" });
+  drawEffortTrack(ctx, c, L, T + 190, R - L, EFFORTS.indexOf(effort), ultra);
+  y = T + 246;
+
+  // NPU: the chip the model runs on, with its simulated load
+  T = y + 16;
+  drawNPU(ctx, c, T, L, R, now, q, size, effort, data.sleep);
+  y = T + 102;
+
+  // Footer
+  const fy = Math.min(SHARE_H - 14, Math.max(SHARE_H - 36, y + 28));
+  text(ctx, `${formatStamp(now).slice(0, 16)} UTC+8`, X, fy, { size: 12, color: c.muted });
+  text(ctx, "echoforger.github.io/usage", SHARE_W - 36, fy, { size: 12, color: c.muted, align: "right" });
+}
+
+// Header pills; returns the bottom edge.
+function drawPills(ctx, c, x, top, pills) {
   const pillWidth = (fs) => pills.reduce((sum, [label, value]) => {
     ctx.font = `400 ${fs}px ${FONT}`;
     const w1 = ctx.measureText(`${label} · `).width;
@@ -116,60 +166,57 @@ function drawShare(ctx, data, now) {
     return sum + w1 + ctx.measureText(value).width + 24 + 8;
   }, -8);
   let fs = 13;
-  while (fs > 10 && pillWidth(fs) > SHARE_W - 72) fs -= 0.5;
-  let px = L - 24;
+  while (fs > 10 && pillWidth(fs) > SHARE_W - 72) fs -= 0.5; // shrink to fit one row
   for (const [label, value] of pills) {
     ctx.font = `400 ${fs}px ${FONT}`;
     const w1 = ctx.measureText(`${label} · `).width;
     ctx.font = `500 ${fs}px ${FONT}`;
     const w = w1 + ctx.measureText(value).width + 24;
     ctx.beginPath();
-    ctx.roundRect(px, 170, w, 30, 15);
+    ctx.roundRect(x, top, w, 30, 15);
     ctx.strokeStyle = c.border;
     ctx.stroke();
-    text(ctx, `${label} · `, px + 12, 190, { size: fs, color: c.muted });
-    text(ctx, value, px + 12 + w1, 190, { size: fs, weight: 500, color: c.fg });
-    px += w + 8;
+    text(ctx, `${label} · `, x + 12, top + 20, { size: fs, color: c.muted });
+    text(ctx, value, x + 12 + w1, top + 20, { size: fs, weight: 500, color: c.fg });
+    x += w + 8;
   }
+  return top + 30;
+}
 
-  // Plan limits: daily limit plus the sleep level that set it
-  text(ctx, t("limitsTitle"), L - 24, 242, { size: 20, weight: 500, color: c.fg });
-  const descLines = wrapText(ctx, t("limitsDesc"), L - 24, 266, SHARE_W - 72, 19, { size: 13, color: c.muted });
-  ctx.translate(0, Math.max(0, descLines - 2) * 19);
-  card(ctx, c, 298, 232);
-  text(ctx, t("dailyLimit"), L, 330, { size: 16, weight: 500, color: c.fg });
-  text(ctx, t(q.offline ? "bootsIn" : "resetsIn", { t: formatDuration(q.resetAt - now) }), L, 356, { size: 14, color: c.muted });
-  text(ctx, t("left", { p: Math.floor(q.fraction * 100) }), R, 356, { size: 14, color: c.muted, align: "right" });
-  pill(ctx, L, 368, 10, R - L, 5, c.track);
-  if (q.fraction > 0) pill(ctx, L, 368, 10, Math.max(10, (R - L) * q.fraction), 5, c.fill);
-  text(ctx, `${q.left.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} tokens`, L, 396, { size: 12, color: c.muted });
-  text(ctx, t(q.offline ? "offline" : "online"), R, 396, { size: 12, color: c.muted, align: "right" });
-  ctx.fillStyle = c.border;
-  ctx.fillRect(L, 414, R - L, 1);
-  text(ctx, t("sleepTitle"), L, 444, { size: 16, weight: 500, color: c.fg });
-  text(ctx, t("sleepDesc"), L, 464, { size: 12, color: c.muted });
-  drawSeg(ctx, c, L, 476, R - L,
-    SLEEP_STOPS.map((s, i) => `${STRINGS[lang].sleepLevels[i]} · ${formatTokens(dailyTotal(s))}`),
-    Math.round(clamp01(data.sleep) * (SLEEP_STOPS.length - 1)));
+function tagWidth(ctx, label) {
+  ctx.font = `400 10px ${FONT}`;
+  return ctx.measureText(label).width + 10;
+}
 
-  // Current configuration: model size and reasoning effort
-  text(ctx, t("configTitle"), L - 24, 572, { size: 20, weight: 500, color: c.fg });
-  card(ctx, c, 588, 292);
-  text(ctx, t("sizeTitle"), L, 620, { size: 16, weight: 500, color: c.fg });
-  text(ctx, t("sizeDesc"), L, 640, { size: 12, color: c.muted });
-  drawSeg(ctx, c, L, 652, R - L, SIZES.map((s) => `Haonan-${v.label}-${s}`), SIZES.indexOf(size));
-  text(ctx, t("effortTitle"), L, 722, { size: 16, weight: 500, color: c.fg });
-  text(ctx, t("effortDesc"), L, 742, { size: 12, color: c.muted });
-  const ultra = effort === "Ultra";
-  text(ctx, effort, SHARE_W / 2, 780, { size: 26, weight: 500, color: ultra ? c.purple : c.blue, align: "center" });
-  text(ctx, name, SHARE_W / 2, 804, { size: 14, color: c.muted, align: "center" });
-  drawEffortTrack(ctx, c, L, 820, R - L, EFFORTS.indexOf(effort), ultra);
-  ctx.restore();
+// Small outlined label, like the page's Estimated/Simulated tags.
+function drawTag(ctx, c, label, x, baseline) {
+  const w = tagWidth(ctx, label);
+  ctx.beginPath();
+  ctx.roundRect(x, baseline - 11, w, 15, 4);
+  ctx.strokeStyle = c.border;
+  ctx.stroke();
+  text(ctx, label, x + 5, baseline, { size: 10, color: c.muted });
+}
 
-  // Footer
-  const stamp = new Date(now + TZ_OFFSET).toISOString().slice(0, 16).replace("T", " ");
-  text(ctx, `${stamp} UTC+8`, L - 24, SHARE_H - 36, { size: 12, color: c.muted });
-  text(ctx, "echoforger.github.io/usage", SHARE_W - 36, SHARE_H - 36, { size: 12, color: c.muted, align: "right" });
+function drawNPU(ctx, c, T, L, R, now, q, size, effort, sleep) {
+  const gpu = getCurrentGPU(now);
+  const util = getGPUUtilization({ offline: q.offline, size, effort, sleep });
+  card(ctx, c, T, 102);
+  text(ctx, t("npuName"), L, T + 28, { size: 13, color: c.muted });
+  const status = t(q.offline ? "gpuSleep" : "gpuOnline");
+  ctx.font = `500 12px ${FONT}`;
+  const sw = ctx.measureText(status).width + 20;
+  pill(ctx, R - sw, T + 14, 22, sw, 11, q.offline ? c.seg : c.blue);
+  text(ctx, status, R - sw / 2, T + 29, { size: 12, weight: 500, color: q.offline ? c.muted : "#fff", align: "center" });
+  const nw = text(ctx, gpu.name, L, T + 58, { size: 22, weight: 600, color: c.fg });
+  const aw = text(ctx, `${t("archFull", { a: gpu.arch })} · ${formatPflops(gpu.tflops)}`, L + nw + 10, T + 58, { size: 12, color: c.muted });
+  drawTag(ctx, c, t("tagEstimated"), L + nw + 10 + aw + 6, T + 57);
+  const uw = text(ctx, `${t("kUtil")} ${Math.round(util * 100)}%`, L, T + 84, { size: 13, color: c.fg });
+  drawTag(ctx, c, t("tagSimulated"), L + uw + 6, T + 83);
+  const tagW = tagWidth(ctx, t("tagSimulated"));
+  const effText = `${t("kEffective")} ${Math.round(getEffectiveCompute(gpu, util))} TFLOPS`;
+  text(ctx, effText, R - tagW - 6, T + 84, { size: 13, color: c.fg, align: "right" });
+  drawTag(ctx, c, t("tagSimulated"), R - tagW, T + 83);
 }
 
 function drawEffortTrack(ctx, c, x, y, w, index, ultra) {

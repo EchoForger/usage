@@ -1,4 +1,5 @@
-// Biological GPU: the brain as the hardware that runs the Haonan model.
+// Biological NPU (生物神经处理器): the brain as the hardware that runs the Haonan model.
+// Code identifiers still say "gpu"; everything user-facing says NPU.
 // Generation boundaries come from population brain-network studies (approximate turning
 // points at ages 9, 32, 66 and 83). They are product version boundaries, not medical predictions.
 // All compute/memory/bandwidth figures are nominal product specs, not measurements.
@@ -128,7 +129,7 @@ const GPU_TEXT = {
   },
 };
 Object.assign(STRINGS.zh, {
-  gpuTitle: "GPU", gpuDesc: "生物神经处理器：运行 Haonan 模型的硬件。模型版本按年龄季度更新，GPU 只按大脑生命周期阶段更新，两者互不影响。",
+  gpuTitle: "NPU", npuName: "生物神经处理器", gpuDesc: "生物神经处理器：运行 Haonan 模型的硬件。模型版本按年龄季度更新，NPU 只按大脑生命周期阶段更新，两者互不影响。",
   genLabel: "第 {n} 代生物 NPU", archFull: "{a} Neural 架构",
   kPeak: "峰值算力", kMemory: "存储容量", kBandwidth: "存储带宽", kPower: "功耗", kEfficiency: "能效",
   tagEstimated: "估算", tagSimulated: "模拟", tagBiological: "生物学参考", tagNominal: "名义",
@@ -149,14 +150,14 @@ Object.assign(STRINGS.zh, {
   vType: "生物神经处理单元", vNeurons: "约 860 亿", vCooling: "脑血流", vMemArch: "分布式神经记忆",
   vLearning: "神经可塑性", vSignal: "电化学信号", vSubstrate: "生物神经网络",
   specNote: "算力、存储和带宽都是产品化的虚拟等效指标，不是医学测量，不能用来推断 IQ，也不代表人脑比某款 GPU 强多少倍。神经元数量和 20 W 功耗是人类平均参考量级。代际边界取自人群脑网络研究中的近似转折年龄（9、32、66、83 岁），是网站定义的版本边界，不代表个人在这些年龄发生变化，也不是真的更换了芯片。",
-  tlTitle: "GPU 架构时间轴", tlDesc: "同一颗大脑在不同年龄阶段的架构代际。点击查看每一代的规格，时间轴不按年份比例绘制。",
+  tlTitle: "NPU 架构时间轴", tlDesc: "同一颗大脑在不同年龄阶段的架构代际。点击查看每一代的规格，时间轴不按年份比例绘制。",
   stHistorical: "历史", stCurrent: "当前", stPlanned: "规划中",
   ages: "{a}–{b} 岁", agesOpen: "{a} 岁以后", period: "{s} 至 {e}", periodOpen: "{s} 起",
   backToCurrent: "回到当前 {g}", plannedNote: "拟定规格，仅为网站的版本规划，不是对未来能力的预测。",
   compareTitle: "代际对比", kStage: "生物阶段", kAges: "年龄",
 });
 Object.assign(STRINGS.en, {
-  gpuTitle: "GPU", gpuDesc: "Biological Neural Processor: the hardware that runs the Haonan model. The model version follows age quarters; the GPU only follows brain lifecycle stages. Neither changes the other.",
+  gpuTitle: "NPU", npuName: "Biological NPU", gpuDesc: "Biological NPU: the hardware that runs the Haonan model. The model version follows age quarters; the NPU only follows brain lifecycle stages. Neither changes the other.",
   genLabel: "{o} Generation Biological NPU", archFull: "{a} Neural Architecture",
   kPeak: "Peak Compute", kMemory: "Memory", kBandwidth: "Memory Bandwidth", kPower: "Power", kEfficiency: "Efficiency",
   tagEstimated: "Estimated", tagSimulated: "Simulated", tagBiological: "Biological", tagNominal: "Nominal",
@@ -177,7 +178,7 @@ Object.assign(STRINGS.en, {
   vType: "Biological Neural Processing Unit", vNeurons: "~86 billion", vCooling: "Cerebral blood flow", vMemArch: "Distributed neural memory",
   vLearning: "Neuroplasticity", vSignal: "Electrochemical", vSubstrate: "Biological neural network",
   specNote: "Compute, memory and bandwidth are virtual product-style equivalents, not medical measurements. They say nothing about IQ and do not mean a brain beats any GPU by some factor. Neuron count and 20 W power are human averages. Generation boundaries use approximate turning-point ages from population brain-network studies (9, 32, 66, 83). They are version boundaries defined by this site, not changes predicted for one person, and no chip is actually replaced.",
-  tlTitle: "GPU Architecture Timeline", tlDesc: "Architecture generations of the same brain across life stages. Select one to see its specs. Not drawn to scale.",
+  tlTitle: "NPU Architecture Timeline", tlDesc: "Architecture generations of the same brain across life stages. Select one to see its specs. Not drawn to scale.",
   stHistorical: "Historical", stCurrent: "Current", stPlanned: "Planned",
   ages: "Age {a}–{b}", agesOpen: "Age {a}+", period: "{s} to {e}", periodOpen: "From {s}",
   backToCurrent: "Back to current {g}", plannedNote: "Proposed specs. This is the site's version plan, not a prediction of future ability.",
