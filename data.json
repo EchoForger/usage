@@ -1,9 +1,9 @@
 {
-  "sleep": 0.5,
-  "sleepDate": "2026-10-31",
-  "clarity": 0.17,
-  "desire": 0.5,
-  "updatedAt": "2026-10-31T10:59:11+08:00",
+  "sleep": 1.0,
+  "sleepDate": "2026-11-02",
+  "clarity": 0.83,
+  "desire": 0.9,
+  "updatedAt": "2026-11-02T14:23:03+08:00",
   "left": 0.79,
   "leftAt": "2026-10-31T10:59:01+08:00"
 }
