@@ -4,13 +4,18 @@
 Listens on 127.0.0.1 only. The public GitHub Pages copy has no API, so it stays read-only.
 """
 import json
+import os
+import signal
+import subprocess
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import brain
+import summary
 
 PORT = 8765
+MENUBAR_LABEL = "com.wuhaonan.usage-menubar"  # same as menubar/install.py
 ALLOWED_HOSTS = {f"localhost:{PORT}", f"127.0.0.1:{PORT}"}
 
 push_state = {"state": "idle", "error": None}
@@ -48,6 +53,8 @@ class Handler(SimpleHTTPRequestHandler):
                 and self.headers.get("Content-Type", "").startswith("application/json"))
 
     def do_GET(self):
+        if self.path == "/api/summary":
+            return self.send_json(200, summary.summary())
         if self.path == "/api/status":
             return self.send_json(200, {**push_state, "unpushed": brain.unpushed()})
         super().do_GET()
@@ -68,6 +75,24 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(200, {"data": data})
 
 
+def menubar_job(action):
+    """The menu bar app follows this server: started with it, stopped with it.
+    launchctl fails when the menu bar app is not installed; that is fine."""
+    target = f"gui/{os.getuid()}/{MENUBAR_LABEL}"
+    args = ["kickstart", target] if action == "start" else ["kill", "SIGTERM", target]
+    try:
+        subprocess.run(["launchctl", *args], capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 if __name__ == "__main__":
     handler = partial(Handler, directory=str(brain.ROOT))
-    ThreadingHTTPServer(("127.0.0.1", PORT), handler).serve_forever()
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), handler)
+    # launchd stops the job with SIGTERM; shutdown() must run on another thread to avoid deadlock
+    signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown).start())
+    menubar_job("start")
+    try:
+        server.serve_forever()
+    finally:
+        menubar_job("stop")
