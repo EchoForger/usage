@@ -3,12 +3,15 @@
 
 Listens on 127.0.0.1 only. The public GitHub Pages copy has no API, so it stays read-only.
 """
+import base64
 import json
 import os
+import re
 import signal
 import subprocess
+import tempfile
 import threading
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -17,6 +20,30 @@ import summary
 
 PORT = 8765
 MENUBAR_LABEL = "com.wuhaonan.usage-menubar"  # same as menubar/install.py
+CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+EXPORT_PARAMS = ("sleep", "clarity", "desire", "left")  # unsaved values the menu bar may want in the picture
+
+
+def render_export(kind, lang, dark, values):
+    """Load the page in headless Chrome with ?export=kind and return the JPEG the page draws.
+    Reuses the page's own export code, so the image is the same as the browser's export buttons."""
+    if kind not in ("share", "page"):
+        raise ValueError("kind must be share or page")
+    query = {"export": kind, "lang": lang if lang in ("zh", "en") else "zh"}
+    for key in EXPORT_PARAMS:
+        if key in values:
+            query[key] = str(float(values[key]))
+    with tempfile.TemporaryDirectory() as profile:  # own profile: do not collide with the running Chrome
+        out = subprocess.run(
+            [CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--user-data-dir={profile}",
+             "--window-size=1280,900", "--virtual-time-budget=20000",
+             f"--blink-settings=preferredColorScheme={0 if dark else 1}", "--dump-dom",
+             f"http://127.0.0.1:{PORT}/?{urlencode(query)}"],
+            capture_output=True, text=True, timeout=90).stdout
+    found = re.search(r'data-export="data:image/jpeg;base64,([^"]+)"', out)
+    if not found:
+        raise RuntimeError("the page did not produce an image")
+    return base64.b64decode(found.group(1))
 ALLOWED_HOSTS = {f"localhost:{PORT}", f"127.0.0.1:{PORT}"}
 
 push_state = {"state": "idle", "error": None}
@@ -55,6 +82,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         url = urlsplit(self.path)
+        if url.path == "/api/export":
+            query = dict(parse_qsl(url.query))
+            try:
+                data = render_export(query.get("kind", "share"), query.get("lang", "zh"), query.get("scheme") == "dark", query)
+            except (ValueError, RuntimeError, OSError, subprocess.SubprocessError) as e:
+                return self.send_json(500, {"error": str(e)})
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if url.path == "/api/summary":
             try:
                 return self.send_json(200, summary.summary(overrides=dict(parse_qsl(url.query))))

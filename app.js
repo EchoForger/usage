@@ -96,7 +96,9 @@ const STRINGS = {
   },
 };
 
-let lang = (typeof localStorage !== "undefined" && localStorage.getItem("lang")) || "zh";
+// ?lang=en|zh overrides the saved choice (used when the menu bar app asks the server to render an image)
+const urlLang = typeof location !== "undefined" ? new URLSearchParams(location.search).get("lang") : null;
+let lang = (["zh", "en"].includes(urlLang) && urlLang) || (typeof localStorage !== "undefined" && localStorage.getItem("lang")) || "zh";
 
 function t(key, vars = {}) {
   return STRINGS[lang][key].replace(/\{(\w+)\}/g, (_, k) => vars[k]);

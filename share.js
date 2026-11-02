@@ -341,7 +341,30 @@ async function exportPage() {
   }
 }
 
+// ?export=share|page renders the image on load and leaves it in <body data-export="data:image/jpeg;base64,...">.
+// server.py loads the page in headless Chrome this way so the menu bar app can copy the same image to the clipboard.
+// sleep/clarity/desire/left in the query preview unsaved values.
+async function autoExport() {
+  const params = new URLSearchParams(location.search);
+  const kind = params.get("export");
+  if (!kind) return;
+  while (!draft) await new Promise((r) => setTimeout(r, 50));
+  for (const key of ["sleep", "clarity", "desire", "left"]) {
+    if (params.has(key)) draft[key] = clamp01(params.get(key));
+  }
+  if (params.has("left")) draft.leftAt = new Date().toISOString();
+  render(draft);
+  await new Promise((r) => setTimeout(r, 300));
+  try {
+    const canvas = kind === "page" ? await pageCanvas() : shareCanvas(draft);
+    document.body.setAttribute("data-export", canvas.toDataURL("image/jpeg", 1));
+  } catch (e) {
+    document.body.setAttribute("data-export", "ERROR " + e.message);
+  }
+}
+
 if (typeof document !== "undefined") {
   $("export-button").addEventListener("click", exportImage);
   $("export-page-button").addEventListener("click", exportPage);
+  autoExport();
 }

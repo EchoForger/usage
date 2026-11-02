@@ -525,6 +525,9 @@ final class Bar: NSObject, NSMenuDelegate {
     var last: Summary?
     var menuOpen = false
     var viewsKey = ""  // 当前菜单里各视图对应的数据，没变化就不用换视图
+    var exportLine: String?  // 生成图片时的提示，显示在菜单顶部
+    var exportBadge = ""  // 菜单栏文字后面的小标记
+    var exporting = false
 
     override init() {
         super.init()
@@ -560,13 +563,15 @@ final class Bar: NSObject, NSMenuDelegate {
     }
 
     func updateTitle() {
-        item.button?.attributedTitle = statusTitle(last, badge: editor.badge)
+        item.button?.attributedTitle = statusTitle(last, badge: editor.badge + exportBadge)
     }
+
+    var line: String? { exportLine ?? editor.line }
 
     func updateLine() {
         guard let line = menu.item(withTag: Tag.line) else { return }
-        setText(line, editor.line)
-        menu.item(withTag: Tag.lineSeparator)?.isHidden = editor.line == nil
+        setText(line, self.line)
+        menu.item(withTag: Tag.lineSeparator)?.isHidden = self.line == nil
     }
 
     func updateViews() {
@@ -583,7 +588,7 @@ final class Bar: NSObject, NSMenuDelegate {
 
     // 菜单打开前重建内容
     func menuNeedsUpdate(_ menu: NSMenu) {
-        fillMenu(menu, last, target: self, pick: pick, line: editor.line)
+        fillMenu(menu, last, target: self, pick: pick, line: line)
         if let s = last {
             viewsKey = "\(s.model)|\(s.sleepIndex)|\(s.effort)|\(Int(s.fraction * 100))|\(s.offline)|\(Int(s.npu.utilization * 100))|\(s.left / 1000)"
         }
@@ -591,6 +596,56 @@ final class Bar: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) { menuOpen = true }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false }
 
+    /// 让服务端用无头 Chrome 渲染和网页导出按钮同一张图，拿到后放进剪贴板。
+    /// 还没发布的点击也带上，图里是点击后的样子；语言用中文，深浅色跟随系统。
+    func copyImage(_ kind: String) {
+        guard !exporting else { return }
+        exporting = true
+        exportBadge = " · …"
+        exportLine = kind == "share" ? "正在生成分享图…" : "正在生成整页图…"
+        updateTitle()
+        updateLine()
+        var url = URLComponents(string: base + "/api/export")!
+        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        url.queryItems = [URLQueryItem(name: "kind", value: kind), URLQueryItem(name: "lang", value: "zh"),
+                          URLQueryItem(name: "scheme", value: dark ? "dark" : "light")]
+            + editor.draft.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: String($0.value)) }
+        URLSession.shared.dataTask(with: URLRequest(url: url.url!, timeoutInterval: 90)) { data, response, _ in
+            DispatchQueue.main.async {
+                self.exporting = false
+                if (response as? HTTPURLResponse)?.statusCode == 200, let data = data, let image = NSImage(data: data) {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.writeObjects([image])  // 系统会生成 TIFF，大多数应用都能粘贴
+                    let jpeg = NSPasteboard.PasteboardType("public.jpeg")  // 同时放原始 JPEG，体积小，支持的应用会优先用它
+                    pasteboard.addTypes([jpeg], owner: nil)
+                    pasteboard.setData(data, forType: jpeg)
+                    NSSound(named: "Pop")?.play()
+                    let size = image.representations.first.map { "\($0.pixelsWide)×\($0.pixelsHigh)" } ?? ""
+                    self.finishExport("已复制到剪贴板（\(size)）", badge: " · ✓")
+                } else {
+                    self.finishExport("生成图片失败，请确认服务和 Chrome 都在运行", badge: " · ⚠")
+                }
+            }
+        }.resume()
+    }
+
+    func finishExport(_ text: String, badge: String) {
+        exportLine = text
+        exportBadge = badge
+        updateTitle()
+        updateLine()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            guard self.exportLine == text, !self.exporting else { return }
+            self.exportLine = nil
+            self.exportBadge = ""
+            self.updateTitle()
+            self.updateLine()
+        }
+    }
+
+    @objc func copyShare() { copyImage("share") }
+    @objc func copyPage() { copyImage("page") }
     @objc func openWeb() { NSWorkspace.shared.open(URL(string: base + "/")!) }
     @objc func quit() {
         if editor.deadline != nil { editor.publish(leaving: true) }  // 倒计时没走完的改动先发布
@@ -632,6 +687,15 @@ func fillMenu(_ menu: NSMenu, _ s: Summary?, target: Bar?, pick: @escaping Pick 
         menu.addItem(textItem("服务没有运行（\(base)）", color: .secondaryLabelColor))
     }
     menu.addItem(.separator())
+    if s != nil {
+        let share = NSMenuItem(title: "复制分享图到剪贴板（9:16）", action: #selector(Bar.copyShare), keyEquivalent: "c")
+        share.target = target
+        let page = NSMenuItem(title: "复制整页图到剪贴板", action: #selector(Bar.copyPage), keyEquivalent: "")
+        page.target = target
+        menu.addItem(share)
+        menu.addItem(page)
+        menu.addItem(.separator())
+    }
     let web = NSMenuItem(title: "打开网页", action: #selector(Bar.openWeb), keyEquivalent: "o")
     web.target = target
     let quit = NSMenuItem(title: "退出", action: #selector(Bar.quit), keyEquivalent: "q")
