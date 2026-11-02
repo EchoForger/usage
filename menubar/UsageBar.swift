@@ -227,7 +227,7 @@ func statusTitle(_ s: Summary?, badge: String = "") -> NSAttributedString {
 
 // MARK: - 菜单里的视图：用 AppKit 自带的控件（NSTextField、NSLevelIndicator、NSStackView）拼出来
 
-let menuWidth: CGFloat = 300
+let menuWidth: CGFloat = 320  // 菜单宽度由最宽的一项决定，其他菜单项的文字都要比这个窄，菜单才不会被撑宽
 
 func label(_ text: String, size: CGFloat = 13, weight: NSFont.Weight = .regular,
            color: NSColor = .labelColor, digits: Bool = false) -> NSTextField {
@@ -255,7 +255,7 @@ func hstack(_ views: [NSView]) -> NSStackView {
     stack.orientation = .horizontal
     stack.alignment = .centerY
     stack.spacing = 8
-    stack.widthAnchor.constraint(equalToConstant: menuWidth - 28).isActive = true  // 占满一行（左右各留 14）
+    stack.widthAnchor.constraint(equalToConstant: menuWidth - 32).isActive = true  // 占满一行（左右各留 16，和普通菜单项的文字对齐）
     return stack
 }
 
@@ -287,7 +287,7 @@ func host(_ rows: [NSView]) -> NSView {
     stack.orientation = .vertical
     stack.alignment = .leading
     stack.spacing = 4
-    stack.edgeInsets = NSEdgeInsets(top: 8, left: 14, bottom: 8, right: 14)
+    stack.edgeInsets = NSEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
     stack.translatesAutoresizingMaskIntoConstraints = false
     let host = NSView(frame: NSRect(x: 0, y: 0, width: menuWidth, height: 10))
     host.addSubview(stack)
@@ -327,9 +327,19 @@ func npuView(_ s: Summary) -> NSView {
     return host(rows)
 }
 
+/// 每行最多 limit 个字符，超出的换行，免得一行太长把整个菜单撑宽
+func wrapped(_ text: String, limit: Int = 30) -> String {
+    var lines: [String] = [], line = ""
+    for ch in text {
+        if line.count >= limit { lines.append(line); line = "" }
+        line.append(ch)
+    }
+    return (lines + [line]).joined(separator: "\n")
+}
+
 func textItem(_ text: String, color: NSColor) -> NSMenuItem {
     let item = NSMenuItem()
-    item.attributedTitle = NSAttributedString(string: text, attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: color])
+    item.attributedTitle = NSAttributedString(string: wrapped(text), attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: color])
     item.isEnabled = false  // 只是展示；带颜色的富文本在禁用状态下也不会变灰
     return item
 }
@@ -433,7 +443,8 @@ func fillMenu(_ menu: NSMenu, _ s: Summary?, target: Bar?, line: String? = nil) 
         menu.addItem(npu)
         menu.addItem(.separator())
         let sync = s.unpushed.map { $0 == 0 ? "已同步到 GitHub" : "\($0) 个版本未推送到 GitHub" } ?? "同步状态未知"
-        menu.addItem(textItem("最近更新 \(stamp(s.updatedAt)) · \(sync)", color: s.unpushed == 0 ? .secondaryLabelColor : .systemOrange))
+        menu.addItem(textItem("最近更新 \(stamp(s.updatedAt))", color: .secondaryLabelColor))
+        menu.addItem(textItem(sync, color: s.unpushed == 0 ? .secondaryLabelColor : .systemOrange))
     } else {
         menu.addItem(textItem("服务没有运行（\(base)）", color: .secondaryLabelColor))
     }
@@ -517,7 +528,7 @@ if args.contains("--dump") || args.contains("--snapshot") {
             if let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count {
                 snapshot(menu, to: args[i + 1])
             } else {
-                print("菜单栏:" + statusTitle(s).string)
+                print("菜单栏:" + statusTitle(s).string + "  菜单宽度: \(Int(menu.size.width))（视图宽度 \(Int(menuWidth))）")
                 for item in menu.items {
                     if item.isSeparatorItem { print("----------") }
                     else if let view = item.view { print(texts(in: view).joined(separator: " | ")) }
