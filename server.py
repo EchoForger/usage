@@ -8,6 +8,7 @@ import os
 import signal
 import subprocess
 import threading
+from urllib.parse import parse_qsl, urlsplit
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -53,8 +54,12 @@ class Handler(SimpleHTTPRequestHandler):
                 and self.headers.get("Content-Type", "").startswith("application/json"))
 
     def do_GET(self):
-        if self.path == "/api/summary":
-            return self.send_json(200, summary.summary())
+        url = urlsplit(self.path)
+        if url.path == "/api/summary":
+            try:
+                return self.send_json(200, summary.summary(overrides=dict(parse_qsl(url.query))))
+            except ValueError as e:
+                return self.send_json(400, {"error": str(e)})
         if self.path == "/api/status":
             return self.send_json(200, {**push_state, "unpushed": brain.unpushed()})
         super().do_GET()

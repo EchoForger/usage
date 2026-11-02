@@ -49,9 +49,17 @@ def quota(now, total, left, left_at):
     return False, fraction, end + timedelta(hours=BOOT_HOUR)
 
 
-def summary(now=None):
+def summary(now=None, overrides=None):
+    """overrides: unsaved sleep/clarity/desire/left values to preview (the menu bar's pending clicks).
+    Nothing is written; `saved` always reports what is in data.json."""
     now = now or datetime.now(BJ)
     data = brain.read()
+    saved = {k: data.get(k) for k in ("sleep", "clarity", "desire", "left", "leftAt")}
+    for key in ("sleep", "clarity", "desire", "left"):
+        if overrides and key in overrides:
+            data[key] = clamp01(float(overrides[key]))
+            if key == "left":
+                data["leftAt"] = now.isoformat()
     major, quarter = version(now)
     size = bucket(data["clarity"], SIZES)
     effort = bucket(data["desire"], EFFORTS)
@@ -69,7 +77,7 @@ def summary(now=None):
         "fraction": fraction, "offline": offline,
         "now": now.timestamp(), "resetAt": reset_at.timestamp(),
         "updatedAt": datetime.fromisoformat(data["updatedAt"]).timestamp(),
-        "unpushed": brain.unpushed(),
+        "unpushed": brain.unpushed(), "saved": saved,
         "npu": {"name": name, "arch": arch, "generation": generation, "peakTflops": tflops,
                 "utilization": utilization, "effectiveTflops": tflops * utilization},
     }

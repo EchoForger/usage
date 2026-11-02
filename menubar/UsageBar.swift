@@ -13,7 +13,16 @@ struct NPU: Decodable {
     let utilization: Double
     let effectiveTflops: Double
 }
+/// data.json 里已经保存的值（不含还没发布的点击）
+struct Saved: Decodable {
+    let sleep: Double
+    let clarity: Double
+    let desire: Double
+    let left: Double?
+    let leftAt: String?
+}
 struct Summary: Decodable {
+    let saved: Saved
     let model: String
     let size: String
     let effort: String
@@ -29,10 +38,44 @@ struct Summary: Decodable {
     let npu: NPU
 }
 
-func fetch(_ done: @escaping (Summary?) -> Void) {
-    let request = URLRequest(url: URL(string: base + "/api/summary")!, timeoutInterval: 3)
-    URLSession.shared.dataTask(with: request) { data, _, _ in
+/// overrides：还没发布的点击，服务端只用来预览，不会写入。
+func fetch(_ overrides: [String: Double] = [:], _ done: @escaping (Summary?) -> Void) {
+    var url = URLComponents(string: base + "/api/summary")!
+    url.queryItems = overrides.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: String($0.value)) }
+    URLSession.shared.dataTask(with: URLRequest(url: url.url!, timeoutInterval: 3)) { data, _, _ in
         done(data.flatMap { try? JSONDecoder().decode(Summary.self, from: $0) })
+    }.resume()
+}
+
+/// 和网页一样的保存请求：POST /api/update。Host 和 Content-Type 都是服务端校验要求的。
+/// wait 为 true 时会等请求结束（退出前用），done 的参数是错误信息，成功为 nil。
+func postUpdate(_ body: [String: Any], timeout: TimeInterval = 5, wait: Bool = false,
+                _ done: @escaping (String?) -> Void) {
+    var request = URLRequest(url: URL(string: base + "/api/update")!, timeoutInterval: timeout)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+    let finished = DispatchSemaphore(value: 0)
+    URLSession.shared.dataTask(with: request) { data, response, error in
+        var message: String?
+        if let error = error {
+            message = error.localizedDescription
+        } else if (response as? HTTPURLResponse)?.statusCode != 200 {
+            let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+            message = json?["error"] as? String ?? "HTTP 错误"
+        }
+        done(message)
+        finished.signal()
+    }.resume()
+    if wait { _ = finished.wait(timeout: .now() + timeout) }
+}
+
+struct PushState: Decodable { let state: String; let error: String? }
+
+func fetchPushState(_ done: @escaping (PushState?) -> Void) {
+    let request = URLRequest(url: URL(string: base + "/api/status")!, timeoutInterval: 3)
+    URLSession.shared.dataTask(with: request) { data, _, _ in
+        done(data.flatMap { try? JSONDecoder().decode(PushState.self, from: $0) })
     }.resume()
 }
 
@@ -54,15 +97,130 @@ func stamp(_ epoch: Double) -> String {
     return formatter.string(from: Date(timeIntervalSince1970: epoch))
 }
 
+let sizes = ["Solo", "Quartet", "Symph"]
+let efforts = ["Light", "Medium", "High", "Extra high", "Ultra"]
+let publishDelay = Double(ProcessInfo.processInfo.environment["USAGE_PUBLISH_DELAY"] ?? "") ?? 10  // 最后一次点击后多少秒发布
+
+/// 取第 i 档（共 n 档）的中间值，保证服务端换算回同一档。和网页的 bucketValue 一致。
+func bucketValue(_ i: Int, _ n: Int) -> Double { ((Double(i) + 0.5) / Double(n) * 100).rounded() / 100 }
+
+/// 点击后的待发布逻辑，规则和网页一致：每次点击重新开始倒计时，最后一次点击后 publishDelay 秒内没有新点击，
+/// 就用倒计时结束的时刻当版本戳，把改动 POST 到 /api/update（服务端提交并推送到 GitHub）。
+final class Editor {
+    var draft: [String: Double] = [:]  // 点过但还没发布的值
+    var leftAtMs: Double = 0  // 点"今日剩余额度"的时刻
+    var saved: Saved?
+    var deadline: Date?
+    var timer: Timer?
+    var status: String?
+    var busy = false  // 正在保存或推送
+    var failed = false
+    var onChange: () -> Void = {}
+
+    /// 需要发布的改动：睡眠和剩余额度每次点击都算，其余的要和已保存的值不同才算
+    func pending() -> [String: Double] {
+        guard let saved = saved else { return draft }
+        let current = ["sleep": saved.sleep, "clarity": saved.clarity, "desire": saved.desire]
+        return draft.filter { key, value in
+            key == "sleep" || key == "left" || abs(value - (current[key] ?? -1)) > 1e-9
+        }
+    }
+
+    /// 菜单里显示的状态行
+    var line: String? {
+        if let deadline = deadline {
+            return "\(max(0, Int(deadline.timeIntervalSinceNow.rounded(.up)))) 秒后发布版本 \(stamp(deadline.timeIntervalSince1970))"
+        }
+        return status
+    }
+
+    /// 菜单栏文字后面的小标记
+    var badge: String {
+        if let deadline = deadline { return " · \(max(0, Int(deadline.timeIntervalSinceNow.rounded(.up))))s" }
+        return failed ? " · ⚠" : busy ? " · ↑" : ""
+    }
+
+    func edit(_ key: String, _ value: Double) {
+        draft[key] = value
+        if key == "left" { leftAtMs = Date().timeIntervalSince1970 * 1000 }
+        status = nil
+        failed = false
+        timer?.invalidate()
+        timer = nil
+        deadline = nil
+        if pending().isEmpty {
+            draft = [:]
+        } else {
+            deadline = Date().addingTimeInterval(publishDelay)
+            timer = Timer.scheduledTimer(withTimeInterval: publishDelay, repeats: false) { [weak self] _ in self?.publish() }
+        }
+        onChange()
+    }
+
+    /// leaving：程序要退出了，不等倒计时，马上发布并等请求结束
+    func publish(leaving: Bool = false) {
+        timer?.invalidate()
+        timer = nil
+        let changes = pending()
+        let at = leaving ? Date() : (deadline ?? Date())
+        deadline = nil
+        draft = [:]
+        guard !changes.isEmpty else { return onChange() }
+        let version = stamp(at.timeIntervalSince1970)
+        var body: [String: Any] = changes
+        body["at"] = at.timeIntervalSince1970 * 1000
+        if changes["left"] != nil { body["leftAt"] = leftAtMs }
+        status = "正在保存版本 \(version)…"
+        busy = true
+        onChange()
+        postUpdate(body, timeout: leaving ? 2 : 5, wait: leaving) { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    self.status = "版本 \(version) 保存失败：\(error)"
+                    self.busy = false
+                    self.failed = true
+                } else {
+                    self.status = "版本 \(version) 已保存，正在推送到 GitHub…"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.pollPush(version) }
+                }
+                self.onChange()
+            }
+        }
+    }
+
+    func pollPush(_ version: String) {
+        fetchPushState { state in
+            DispatchQueue.main.async {
+                guard let state = state, state.state != "pushing" else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.pollPush(version) }
+                    return
+                }
+                self.busy = false
+                if state.state == "failed" {
+                    self.failed = true
+                    self.status = "版本 \(version) 已保存到本地，但推送失败：\(state.error ?? "未知错误")"
+                } else {
+                    let done = "版本 \(version) 已发布，线上页面几分钟内更新。"
+                    self.status = done
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                        if self.status == done { self.status = nil; self.onChange() }
+                    }
+                }
+                self.onChange()
+            }
+        }
+    }
+}
+
 /// 菜单栏上的简略状态：一个圆点（在线为绿，睡眠为灰）加简称和剩余额度。
-func statusTitle(_ s: Summary?) -> NSAttributedString {
+func statusTitle(_ s: Summary?, badge: String = "") -> NSAttributedString {
     let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
     let result = NSMutableAttributedString()
     let online = s.map { !$0.offline } ?? false
     result.append(NSAttributedString(string: "●", attributes: [
         .font: font, .foregroundColor: online ? NSColor.systemGreen : NSColor.systemGray]))
     let text: String
-    if let s = s { text = " \(s.size) " + (s.offline ? "睡眠" : "\(Int(s.fraction * 100))%") } else { text = " 未运行" }
+    if let s = s { text = " \(s.size) " + (s.offline ? "睡眠" : "\(Int(s.fraction * 100))%") + badge } else { text = " 未运行" }
     result.append(NSAttributedString(string: text, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)]))
     return result
 }
@@ -142,11 +300,7 @@ func host(_ rows: [NSView]) -> NSView {
     return host
 }
 
-func keyValue(_ key: String, _ value: String) -> NSView {
-    hstack([fixed(label(key, size: 12, color: .secondaryLabelColor), width: 64), label(value, size: 12)])
-}
-
-/// 模型：名称、每日额度进度条，以及当前的睡眠、模型大小、推理强度。
+/// 模型：名称、每日额度进度条。睡眠、模型大小、推理强度在下面的子菜单里，可以直接切换。
 func modelView(_ s: Summary) -> NSView {
     let light = label("●", size: 12, weight: .semibold, color: s.offline ? .systemGray : .systemGreen)
     var rows: [NSView] = [hstack([fixed(light, width: 14), label(s.model, weight: .semibold), flexible(),
@@ -157,9 +311,6 @@ func modelView(_ s: Summary) -> NSView {
     rows.append(hstack([fixed(NSView(), width: 56),
                         label("\(s.left.formatted()) / \(s.total.formatted()) tokens", size: 11, color: .tertiaryLabelColor)]))
     rows.append(hstack([fixed(NSView(), width: 56), label(reset, size: 11, color: .tertiaryLabelColor)]))
-    rows.append(keyValue("模型大小", s.size))
-    rows.append(keyValue("推理强度", s.offline ? "关闭" : s.effort))
-    rows.append(keyValue("昨晚睡眠", "\(sleepLevels[s.sleepIndex]) · \(sleepTokens[s.sleepIndex])"))
     return host(rows)
 }
 
@@ -183,37 +334,99 @@ func textItem(_ text: String, color: NSColor) -> NSMenuItem {
     return item
 }
 
-final class Bar: NSObject {
+final class Bar: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    let menu = NSMenu()
+    let editor = Editor()
+    var last: Summary?
 
     override init() {
         super.init()
         item.button?.image = nil
         item.button?.toolTip = "Haonan 额度与状态"
+        menu.delegate = self
+        item.menu = menu
+        editor.onChange = { [weak self] in self?.refresh() }
         refresh()
         Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refresh() }
+        // 倒计时每秒更新菜单栏上的标记，不需要请求服务端
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            if self?.editor.deadline != nil { self?.updateTitle() }
+        }
     }
 
+    /// 带上还没发布的点击去取数据，菜单栏和菜单马上显示点击后的预览
     func refresh() {
-        fetch { s in DispatchQueue.main.async { self.apply(s) } }
+        fetch(editor.draft) { s in DispatchQueue.main.async { self.apply(s) } }
     }
 
     func apply(_ s: Summary?) {
-        item.button?.attributedTitle = statusTitle(s)
-        item.menu = makeMenu(s, target: self)
+        last = s
+        editor.saved = s?.saved
+        updateTitle()
     }
 
+    func updateTitle() {
+        item.button?.attributedTitle = statusTitle(last, badge: editor.badge)
+    }
+
+    // 菜单打开前才重建内容；菜单开着的时候后台刷新不会动它
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        fillMenu(menu, last, target: self, line: editor.line)
+    }
+
+    @objc func choose(_ sender: NSMenuItem) {
+        guard let pick = sender.representedObject as? [String: Any],
+              let key = pick["key"] as? String, let value = pick["value"] as? Double else { return }
+        editor.edit(key, value)
+    }
     @objc func openWeb() { NSWorkspace.shared.open(URL(string: base + "/")!) }
-    @objc func quit() { NSApp.terminate(nil) }
+    @objc func quit() {
+        if editor.deadline != nil { editor.publish(leaving: true) }  // 倒计时没走完的改动先发布
+        NSApp.terminate(nil)
+    }
 }
 
-func makeMenu(_ s: Summary?, target: Bar?) -> NSMenu {
-    let menu = NSMenu()
+/// 一个带子菜单的选项：标题里写当前值，子菜单里勾选当前档，点击就是切换。
+func choiceItem(_ title: String, key: String, options: [String], values: [Double], selected: Int?,
+                target: Bar?, enabled: Bool = true) -> NSMenuItem {
+    let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+    let sub = NSMenu()
+    for (i, option) in options.enumerated() {
+        let entry = NSMenuItem(title: option, action: #selector(Bar.choose(_:)), keyEquivalent: "")
+        entry.target = target
+        entry.state = i == selected ? .on : .off
+        entry.representedObject = ["key": key, "value": values[i]] as [String: Any]
+        sub.addItem(entry)
+    }
+    item.submenu = sub
+    item.isEnabled = enabled
+    return item
+}
+
+func fillMenu(_ menu: NSMenu, _ s: Summary?, target: Bar?, line: String? = nil) {
+    menu.removeAllItems()
     menu.autoenablesItems = false
     if let s = s {
+        if let line = line { menu.addItem(textItem(line, color: .systemOrange)); menu.addItem(.separator()) }
         let model = NSMenuItem()
         model.view = modelView(s)
         menu.addItem(model)
+        menu.addItem(.separator())
+        let prefix = String(s.model.dropLast(s.size.count))  // Haonan-25.0-
+        let sizeIndex = sizes.firstIndex(of: s.size)
+        let effortIndex = efforts.firstIndex(of: s.effort)
+        let leftSteps = (0...10).map { Double(10 - $0) / 10 }
+        menu.addItem(choiceItem("昨晚睡眠：\(sleepLevels[s.sleepIndex]) · \(sleepTokens[s.sleepIndex])", key: "sleep",
+                                options: zip(sleepLevels, sleepTokens).map { "\($0) · \($1)" },
+                                values: (0..<5).map { Double($0) / 4 }, selected: s.sleepIndex, target: target))
+        menu.addItem(choiceItem("模型大小：\(s.size)", key: "clarity", options: sizes.map { prefix + $0 },
+                                values: (0..<sizes.count).map { bucketValue($0, sizes.count) }, selected: sizeIndex, target: target))
+        menu.addItem(choiceItem("推理强度：\(s.offline ? "关闭" : s.effort)", key: "desire", options: efforts,
+                                values: (0..<efforts.count).map { bucketValue($0, efforts.count) }, selected: effortIndex, target: target))
+        menu.addItem(choiceItem(s.offline ? "今日剩余额度（睡眠中不可调）" : "今日剩余额度：\(Int(s.fraction * 100))%", key: "left",
+                                options: leftSteps.map { "\(Int($0 * 100))%" }, values: leftSteps,
+                                selected: leftSteps.firstIndex { abs($0 - s.fraction) < 0.05 }, target: target, enabled: !s.offline))
         menu.addItem(.separator())
         let npu = NSMenuItem()
         npu.view = npuView(s)
@@ -231,14 +444,23 @@ func makeMenu(_ s: Summary?, target: Bar?) -> NSMenu {
     quit.target = target
     menu.addItem(web)
     menu.addItem(quit)
+}
+
+func makeMenu(_ s: Summary?, target: Bar?) -> NSMenu {
+    let menu = NSMenu()
+    fillMenu(menu, s, target: target)
     return menu
 }
 
+var barRef: Bar?  // 给 SIGTERM 处理用
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)  // 不在 Dock 里显示，只留菜单栏图标
 signal(SIGTERM, SIG_IGN)  // 服务退出时 launchd 发 SIGTERM；交给 DispatchSource 正常退出，免得被当成崩溃
 let terminator = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-terminator.setEventHandler { exit(0) }
+terminator.setEventHandler {
+    if barRef?.editor.deadline != nil { barRef?.editor.publish(leaving: true) }  // 倒计时没走完的改动先发出去
+    exit(0)
+}
 terminator.resume()
 
 /// 调试用：--dump 打印菜单文字，--snapshot 路径.png 把菜单里的视图渲染成图片（深色背景）。
@@ -300,6 +522,7 @@ if args.contains("--dump") || args.contains("--snapshot") {
                     if item.isSeparatorItem { print("----------") }
                     else if let view = item.view { print(texts(in: view).joined(separator: " | ")) }
                     else { print(item.attributedTitle?.string ?? item.title) }
+                    for option in item.submenu?.items ?? [] { print("    \(option.state == .on ? "✓" : "·") \(option.title)") }
                 }
             }
             done.signal()
@@ -309,5 +532,30 @@ if args.contains("--dump") || args.contains("--snapshot") {
     exit(0)
 }
 
+/// 调试用：--click sleep=1 clarity=0.17 desire=0.9 left=0.65  模拟在菜单里点击（键就是 data.json 里的字段），
+/// 打印状态行的变化，直到发布完成。配合 USAGE_PUBLISH_DELAY=2 缩短倒计时，USAGE_PORT 指向测试用的服务。
+if let i = args.firstIndex(of: "--click") {
+    let editor = Editor()
+    let loaded = DispatchSemaphore(value: 0)
+    fetch { editor.saved = $0?.saved; loaded.signal() }
+    while loaded.wait(timeout: .now()) == .timedOut { RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05)) }
+    var lastLine = ""
+    editor.onChange = {
+        let line = (editor.line ?? "-") + (editor.failed ? "  [failed]" : "")
+        if line != lastLine { print(line); lastLine = line }
+    }
+    for pair in args[(i + 1)...] {
+        let parts = pair.split(separator: "=")
+        if parts.count == 2, let value = Double(parts[1]) { editor.edit(String(parts[0]), value) }
+    }
+    let end = Date(timeIntervalSinceNow: 30)
+    while Date() < end && !(lastLine.contains("已发布") || lastLine.contains("失败")) && (editor.deadline != nil || editor.status != nil) {
+        RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.2))
+        editor.onChange()
+    }
+    exit(0)
+}
+
 let bar = Bar()
+barRef = bar
 app.run()
