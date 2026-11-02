@@ -1,7 +1,8 @@
-// Draws a 9:16 share card (2160x3840 JPEG) of the current status with Canvas 2D.
+// Draws a 3:4 portrait share card (2160x2880 JPEG) of the current status with Canvas 2D.
 const SHARE_W = 540;
-const SHARE_H = 960;
-const SHARE_SCALE = 4; // 540x960 layout units -> 2160x3840 pixels
+const SHARE_H = 720;
+const SHARE_SCALE = 4; // 540x720 layout units -> 2160x2880 pixels
+const MIN_FIT = 0.8; // the layout is shrunk by at most this much to fit the height
 const FONT = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif';
 
 function shareColors() {
@@ -72,9 +73,9 @@ function wrapText(ctx, str, x, y, maxWidth, lineHeight, opts) {
   return lines.length;
 }
 
-function card(ctx, c, y, h) {
+function card(ctx, c, y, h, W) {
   ctx.beginPath();
-  ctx.roundRect(36, y, SHARE_W - 72, h, 24);
+  ctx.roundRect(36, y, W - 72, h, 24);
   ctx.fillStyle = c.card;
   ctx.fill();
   ctx.lineWidth = 1;
@@ -82,7 +83,9 @@ function card(ctx, c, y, h) {
   ctx.stroke();
 }
 
-function drawShare(ctx, data, now) {
+// W x H is the layout space. It is wider and taller than the canvas when the content needs shrinking
+// to fit (see shareCanvas). Returns the bottom edge of the content, above the footer.
+function drawShare(ctx, data, now, W = SHARE_W, H = SHARE_H) {
   const c = shareColors();
   const v = version(now);
   const size = bucket(data.clarity, SIZES);
@@ -91,30 +94,23 @@ function drawShare(ctx, data, now) {
   const q = quota(now, total, data.left, data.leftAt);
   const name = `Haonan-${v.label}-${size}`;
   const L = 60; // inner left edge of cards
-  const R = SHARE_W - 60; // inner right edge of cards
+  const R = W - 60; // inner right edge of cards
   const X = L - 24; // left edge of text outside cards
 
   ctx.fillStyle = c.bg;
-  ctx.fillRect(0, 0, SHARE_W, SHARE_H);
+  ctx.fillRect(0, 0, W, H);
 
   // Header: same text as the page header. y is a cursor so wrapped paragraphs push content down.
   text(ctx, t("eyebrow"), X, 46, { size: 14, color: c.muted });
   text(ctx, name, X, 86, { size: 40, weight: 600, color: c.fg });
   let y = 114;
-  y += (wrapText(ctx, t("lede", { age: v.major }), X, y, SHARE_W - 72, 20, { size: 14.5, color: c.muted }) - 1) * 20;
-  y = drawPills(ctx, c, X, y + 14, [
-    [t("size"), size],
-    [t("effort"), q.offline ? t("off") : effort],
-    [t("context"), t("perDay", { n: formatTokens(total) })],
-  ]);
+  y += (wrapText(ctx, t("lede", { age: v.major }), X, y, W - 72, 20, { size: 14.5, color: c.muted }) - 1) * 20;
 
   // Plan limits: daily limit plus the sleep level that set it
   y += 36;
   text(ctx, t("limitsTitle"), X, y, { size: 20, weight: 500, color: c.fg });
-  y += 22;
-  y += (wrapText(ctx, t("limitsDesc"), X, y, SHARE_W - 72, 19, { size: 13, color: c.muted }) - 1) * 19;
-  let T = y + 12;
-  card(ctx, c, T, 218);
+  let T = y + 14;
+  card(ctx, c, T, 218, W);
   text(ctx, t("dailyLimit"), L, T + 30, { size: 16, weight: 500, color: c.fg });
   text(ctx, t(q.offline ? "bootsIn" : "resetsIn", { t: formatDuration(q.resetAt - now) }), L, T + 54, { size: 14, color: c.muted });
   text(ctx, t("left", { p: Math.floor(q.fraction * 100) }), R, T + 54, { size: 14, color: c.muted, align: "right" });
@@ -135,52 +131,26 @@ function drawShare(ctx, data, now) {
   y += 32;
   text(ctx, t("configTitle"), X, y, { size: 20, weight: 500, color: c.fg });
   T = y + 14;
-  card(ctx, c, T, 246);
+  card(ctx, c, T, 246, W);
   text(ctx, t("sizeTitle"), L, T + 30, { size: 16, weight: 500, color: c.fg });
   text(ctx, t("sizeDesc"), L, T + 48, { size: 12, color: c.muted });
   drawSeg(ctx, c, L, T + 58, R - L, SIZES.map((s) => `Haonan-${v.label}-${s}`), SIZES.indexOf(size));
   text(ctx, t("effortTitle"), L, T + 124, { size: 16, weight: 500, color: c.fg });
   text(ctx, t("effortDesc"), L, T + 142, { size: 12, color: c.muted });
   const ultra = effort === "Ultra";
-  text(ctx, effort, SHARE_W / 2, T + 176, { size: 24, weight: 500, color: ultra ? c.purple : c.blue, align: "center" });
+  text(ctx, effort, W / 2, T + 176, { size: 24, weight: 500, color: ultra ? c.purple : c.blue, align: "center" });
   drawEffortTrack(ctx, c, L, T + 190, R - L, EFFORTS.indexOf(effort), ultra);
   y = T + 246;
 
-  // NPU: the chip the model runs on, with its simulated load
+  // NPU: the chip the model runs on
   T = y + 16;
-  drawNPU(ctx, c, T, L, R, now, q, size, effort, data.sleep);
-  y = T + 102;
+  drawNPU(ctx, c, T, L, R, now, q, W);
+  y = T + 74;
 
   // Footer
-  const fy = Math.min(SHARE_H - 14, Math.max(SHARE_H - 36, y + 28));
-  text(ctx, `${formatStamp(now).slice(0, 16)} UTC+8`, X, fy, { size: 12, color: c.muted });
-  text(ctx, "echoforger.github.io/usage", SHARE_W - 36, fy, { size: 12, color: c.muted, align: "right" });
-}
-
-// Header pills; returns the bottom edge.
-function drawPills(ctx, c, x, top, pills) {
-  const pillWidth = (fs) => pills.reduce((sum, [label, value]) => {
-    ctx.font = `400 ${fs}px ${FONT}`;
-    const w1 = ctx.measureText(`${label} · `).width;
-    ctx.font = `500 ${fs}px ${FONT}`;
-    return sum + w1 + ctx.measureText(value).width + 24 + 8;
-  }, -8);
-  let fs = 13;
-  while (fs > 10 && pillWidth(fs) > SHARE_W - 72) fs -= 0.5; // shrink to fit one row
-  for (const [label, value] of pills) {
-    ctx.font = `400 ${fs}px ${FONT}`;
-    const w1 = ctx.measureText(`${label} · `).width;
-    ctx.font = `500 ${fs}px ${FONT}`;
-    const w = w1 + ctx.measureText(value).width + 24;
-    ctx.beginPath();
-    ctx.roundRect(x, top, w, 30, 15);
-    ctx.strokeStyle = c.border;
-    ctx.stroke();
-    text(ctx, `${label} · `, x + 12, top + 20, { size: fs, color: c.muted });
-    text(ctx, value, x + 12 + w1, top + 20, { size: fs, weight: 500, color: c.fg });
-    x += w + 8;
-  }
-  return top + 30;
+  text(ctx, `${formatStamp(now).slice(0, 16)} UTC+8`, X, H - 22, { size: 12, color: c.muted });
+  text(ctx, "echoforger.github.io/usage", W - 36, H - 22, { size: 12, color: c.muted, align: "right" });
+  return y;
 }
 
 function tagWidth(ctx, label) {
@@ -198,10 +168,9 @@ function drawTag(ctx, c, label, x, baseline) {
   text(ctx, label, x + 5, baseline, { size: 10, color: c.muted });
 }
 
-function drawNPU(ctx, c, T, L, R, now, q, size, effort, sleep) {
+function drawNPU(ctx, c, T, L, R, now, q, W) {
   const gpu = getCurrentGPU(now);
-  const util = getGPUUtilization({ offline: q.offline, size, effort, sleep });
-  card(ctx, c, T, 102);
+  card(ctx, c, T, 74, W);
   text(ctx, t("npuName"), L, T + 28, { size: 13, color: c.muted });
   const status = t(q.offline ? "gpuSleep" : "gpuOnline");
   ctx.font = `500 12px ${FONT}`;
@@ -211,12 +180,6 @@ function drawNPU(ctx, c, T, L, R, now, q, size, effort, sleep) {
   const nw = text(ctx, gpu.name, L, T + 58, { size: 22, weight: 600, color: c.fg });
   const aw = text(ctx, `${t("archFull", { a: gpu.arch })} · ${formatPflops(gpu.tflops)}`, L + nw + 10, T + 58, { size: 12, color: c.muted });
   drawTag(ctx, c, t("tagEstimated"), L + nw + 10 + aw + 6, T + 57);
-  const uw = text(ctx, `${t("kUtil")} ${Math.round(util * 100)}%`, L, T + 84, { size: 13, color: c.fg });
-  drawTag(ctx, c, t("tagSimulated"), L + uw + 6, T + 83);
-  const tagW = tagWidth(ctx, t("tagSimulated"));
-  const effText = `${t("kEffective")} ${Math.round(getEffectiveCompute(gpu, util))} TFLOPS`;
-  text(ctx, effText, R - tagW - 6, T + 84, { size: 13, color: c.fg, align: "right" });
-  drawTag(ctx, c, t("tagSimulated"), R - tagW, T + 83);
 }
 
 function drawEffortTrack(ctx, c, x, y, w, index, ultra) {
@@ -260,13 +223,25 @@ function drawEffortTrack(ctx, c, x, y, w, index, ultra) {
   ctx.restore();
 }
 
+// The card is always 3:4. Content is laid out in a space of width SHARE_W / fit; when the content (a long
+// English intro, say) would not fit the height, fit drops below 1 and everything is drawn slightly smaller.
 function shareCanvas(data, now = Date.now()) {
+  const probe = document.createElement("canvas").getContext("2d");
+  const FOOTER = 44; // footer text plus the gap above it
+  let fit = 1;
+  for (let i = 0; i < 4; i++) {
+    const bottom = drawShare(probe, data, now, SHARE_W / fit, SHARE_H / fit);
+    const next = Math.max(MIN_FIT, Math.min(1, SHARE_H / (bottom + FOOTER)));
+    if (Math.abs(next - fit) < 0.002) break;
+    fit = next;
+  }
   const canvas = document.createElement("canvas");
   canvas.width = SHARE_W * SHARE_SCALE;
   canvas.height = SHARE_H * SHARE_SCALE;
   const ctx = canvas.getContext("2d");
-  ctx.scale(SHARE_SCALE, SHARE_SCALE);
-  drawShare(ctx, data, now);
+  ctx.scale(SHARE_SCALE * fit, SHARE_SCALE * fit);
+  drawShare(ctx, data, now, SHARE_W / fit, SHARE_H / fit);
+  canvas.fit = fit;
   return canvas;
 }
 

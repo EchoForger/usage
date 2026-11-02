@@ -688,7 +688,7 @@ func fillMenu(_ menu: NSMenu, _ s: Summary?, target: Bar?, pick: @escaping Pick 
     }
     menu.addItem(.separator())
     if s != nil {
-        let share = NSMenuItem(title: "复制分享图到剪贴板（9:16）", action: #selector(Bar.copyShare), keyEquivalent: "c")
+        let share = NSMenuItem(title: "复制分享图到剪贴板（3:4）", action: #selector(Bar.copyShare), keyEquivalent: "c")
         share.target = target
         let page = NSMenuItem(title: "复制整页图到剪贴板", action: #selector(Bar.copyPage), keyEquivalent: "")
         page.target = target
