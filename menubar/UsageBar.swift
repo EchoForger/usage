@@ -300,18 +300,183 @@ func host(_ rows: [NSView]) -> NSView {
     return host
 }
 
-/// 模型：名称、每日额度进度条。睡眠、模型大小、推理强度在下面的子菜单里，可以直接切换。
-func modelView(_ s: Summary) -> NSView {
+typealias Pick = (String, Double) -> Void  // 点击后的回调：字段名（data.json 里的）和新值
+
+/// 可以点的额度条：点哪里就把剩余额度设成哪里（和网页上点进度条一样），拖动时预览，松开时才算一次点击。
+final class ClickBar: NSView {
+    var value: Double = 0  // 0 到 100
+    var enabled = true
+    var onPick: ((Double) -> Void)?
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 18) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let track = NSRect(x: 0, y: (bounds.height - 10) / 2, width: bounds.width, height: 10)
+        NSColor.tertiaryLabelColor.withAlphaComponent(0.35).setFill()
+        NSBezierPath(roundedRect: track, xRadius: 5, yRadius: 5).fill()
+        var fill = track
+        fill.size.width = max(10, track.width * CGFloat(value / 100))
+        (enabled ? NSColor.controlAccentColor : NSColor.systemGray).setFill()
+        NSBezierPath(roundedRect: fill, xRadius: 5, yRadius: 5).fill()
+    }
+
+    func fraction(_ event: NSEvent) -> Double {
+        let x = convert(event.locationInWindow, from: nil).x
+        return Double(max(0, min(1, x / bounds.width)))
+    }
+    override func mouseDown(with event: NSEvent) { guard enabled else { return }; value = fraction(event) * 100; needsDisplay = true }
+    override func mouseDragged(with event: NSEvent) { guard enabled else { return }; value = fraction(event) * 100; needsDisplay = true }
+    override func mouseUp(with event: NSEvent) {
+        guard enabled else { return }
+        onPick?((fraction(event) * 100).rounded() / 100)  // 和网页一样取两位小数
+    }
+}
+
+/// 分段选择器，样子和网页上的一排选项一样：圆角底，当前一档反白。自己画，不用 NSSegmentedControl，
+/// 因为菜单不是 key 窗口，系统控件的选中色会变灰，画出来的效果不稳定。
+final class PillSegments: NSView {
+    var labels: [String] = []
+    var selected = -1
+    var onPick: ((Int) -> Void)?
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 30) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    func index(_ event: NSEvent) -> Int {
+        let x = convert(event.locationInWindow, from: nil).x
+        return max(0, min(labels.count - 1, Int(x / (bounds.width / CGFloat(labels.count)))))
+    }
+    override func mouseDown(with event: NSEvent) { selected = index(event); needsDisplay = true }
+    override func mouseDragged(with event: NSEvent) { selected = index(event); needsDisplay = true }
+    override func mouseUp(with event: NSEvent) { onPick?(index(event)) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.tertiaryLabelColor.withAlphaComponent(0.25).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
+        let pad: CGFloat = 3
+        let width = (bounds.width - 2 * pad) / CGFloat(labels.count)
+        for (i, text) in labels.enumerated() {
+            let cell = NSRect(x: pad + CGFloat(i) * width, y: pad, width: width, height: bounds.height - 2 * pad)
+            if i == selected {
+                NSColor.labelColor.setFill()
+                NSBezierPath(roundedRect: cell, xRadius: cell.height / 2, yRadius: cell.height / 2).fill()
+            }
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 11.5, weight: i == selected ? .medium : .regular),
+                .foregroundColor: i == selected ? NSColor.controlBackgroundColor : NSColor.secondaryLabelColor]
+            let size = (text as NSString).size(withAttributes: attrs)
+            (text as NSString).draw(at: NSPoint(x: cell.midX - size.width / 2, y: cell.midY - size.height / 2), withAttributes: attrs)
+        }
+    }
+}
+
+func segmented(_ labels: [String], selected: Int?, pick: @escaping (Int) -> Void) -> NSView {
+    let control = PillSegments()
+    control.labels = labels
+    control.selected = selected ?? -1
+    control.onPick = pick
+    control.widthAnchor.constraint(equalToConstant: menuWidth - 32).isActive = true
+    return control
+}
+
+/// 推理强度的滑轨：五个点，白色圆形滑块停在当前一档，点哪里就吸附到最近的一档。Ultra 是紫色渐变。
+final class EffortTrack: NSView {
+    var index = 0
+    var onPick: ((Int) -> Void)?
+    let knob: CGFloat = 28, trackHeight: CGFloat = 22
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 34) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    func stop(_ i: Int) -> CGFloat { knob / 2 + (bounds.width - knob) * CGFloat(i) / CGFloat(efforts.count - 1) }
+    func nearest(_ event: NSEvent) -> Int {
+        let x = convert(event.locationInWindow, from: nil).x
+        let f = (x - knob / 2) / (bounds.width - knob) * CGFloat(efforts.count - 1)
+        return max(0, min(efforts.count - 1, Int(f.rounded())))
+    }
+    override func mouseDown(with event: NSEvent) { index = nearest(event); needsDisplay = true }
+    override func mouseDragged(with event: NSEvent) { index = nearest(event); needsDisplay = true }
+    override func mouseUp(with event: NSEvent) { onPick?(nearest(event)) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let track = NSRect(x: 0, y: (bounds.height - trackHeight) / 2, width: bounds.width, height: trackHeight)
+        NSColor.tertiaryLabelColor.withAlphaComponent(0.25).setFill()
+        NSBezierPath(roundedRect: track, xRadius: trackHeight / 2, yRadius: trackHeight / 2).fill()
+        var fill = track
+        fill.size.width = stop(index) + knob / 2
+        let fillPath = NSBezierPath(roundedRect: fill, xRadius: trackHeight / 2, yRadius: trackHeight / 2)
+        let ultra = index == efforts.count - 1
+        if ultra {
+            NSGradient(colors: [NSColor(red: 0.37, green: 0.49, blue: 0.95, alpha: 1), NSColor(red: 0.55, green: 0.36, blue: 0.90, alpha: 1),
+                                NSColor(red: 0.69, green: 0.47, blue: 0.95, alpha: 1), NSColor(red: 0.48, green: 0.40, blue: 0.93, alpha: 1)])?
+                .draw(in: fillPath, angle: 0)
+        } else {
+            effortBlue.setFill()
+            fillPath.fill()
+            NSColor.tertiaryLabelColor.setFill()
+            for i in 0..<efforts.count {
+                NSBezierPath(ovalIn: NSRect(x: stop(i) - 2, y: bounds.midY - 2, width: 4, height: 4)).fill()
+            }
+        }
+        let circle = NSRect(x: stop(index) - knob / 2, y: bounds.midY - knob / 2, width: knob, height: knob)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowBlurRadius = 4
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.set()
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: circle).fill()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+}
+
+func sectionTitle(_ title: String, value: String, valueColor: NSColor = .secondaryLabelColor) -> NSView {
+    hstack([label(title, weight: .semibold), flexible(), label(value, size: 12, weight: .medium, color: valueColor)])
+}
+
+let effortBlue = NSColor(red: 0x2f / 255, green: 0x6b / 255, blue: 0xd6 / 255, alpha: 1)
+let effortPurple = NSColor(red: 0xa4 / 255, green: 0x6c / 255, blue: 0xf0 / 255, alpha: 1)
+
+/// 模型：名称、每日额度条（可以点）。
+func modelView(_ s: Summary, pick: @escaping Pick) -> NSView {
     let light = label("●", size: 12, weight: .semibold, color: s.offline ? .systemGray : .systemGreen)
     var rows: [NSView] = [hstack([fixed(light, width: 14), label(s.model, weight: .semibold), flexible(),
                                   label(s.offline ? "睡眠中" : "在线", size: 11, weight: .medium, color: .secondaryLabelColor)])]
+    let bar = ClickBar()
+    bar.value = s.fraction * 100
+    bar.enabled = !s.offline  // 睡眠时段不能调，和网页一样
+    bar.onPick = { pick("left", $0) }
+    bar.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
+    bar.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
     rows.append(hstack([fixed(label("今日额度", size: 12, color: .secondaryLabelColor), width: 56),
-                        progressBar(s.fraction * 100), percentLabel((s.fraction * 100).rounded(.down))]))
+                        bar, percentLabel((s.fraction * 100).rounded(.down))]))
     let reset = "\(duration(s.resetAt - s.now))后" + (s.offline ? "启动" : "重置")
     rows.append(hstack([fixed(NSView(), width: 56),
                         label("\(s.left.formatted()) / \(s.total.formatted()) tokens", size: 11, color: .tertiaryLabelColor)]))
     rows.append(hstack([fixed(NSView(), width: 56), label(reset, size: 11, color: .tertiaryLabelColor)]))
     return host(rows)
+}
+
+func sleepView(_ s: Summary, pick: @escaping Pick) -> NSView {
+    host([sectionTitle("昨晚睡眠", value: "\(sleepLevels[s.sleepIndex]) · \(sleepTokens[s.sleepIndex])"),
+          segmented(sleepLevels, selected: s.sleepIndex) { pick("sleep", Double($0) / 4) }])
+}
+
+func sizeView(_ s: Summary, pick: @escaping Pick) -> NSView {
+    host([sectionTitle("模型大小", value: s.model),
+          segmented(sizes, selected: sizes.firstIndex(of: s.size)) { pick("clarity", bucketValue($0, sizes.count)) }])
+}
+
+func effortView(_ s: Summary, pick: @escaping Pick) -> NSView {
+    let index = efforts.firstIndex(of: s.effort) ?? 0
+    let track = EffortTrack()
+    track.index = index
+    track.onPick = { pick("desire", bucketValue($0, efforts.count)) }
+    track.widthAnchor.constraint(equalToConstant: menuWidth - 32).isActive = true
+    return host([sectionTitle("推理强度", value: s.offline ? "\(s.effort)（睡眠中）" : s.effort,
+                              valueColor: s.effort == "Ultra" ? effortPurple : effortBlue), track])
 }
 
 /// 生物神经处理器：型号、架构、模拟的利用率与有效算力。
@@ -344,11 +509,22 @@ func textItem(_ text: String, color: NSColor) -> NSMenuItem {
     return item
 }
 
+// 菜单项的 tag：菜单开着的时候按 tag 找到项目，原地换掉里面的视图
+enum Tag { static let line = 1, lineSeparator = 2, model = 3, sleep = 4, size = 5, effort = 6, npu = 7 }
+
+func setText(_ item: NSMenuItem, _ text: String?, color: NSColor = .systemOrange) {
+    item.isHidden = text == nil
+    item.attributedTitle = NSAttributedString(string: wrapped(text ?? ""), attributes: [
+        .font: NSFont.menuFont(ofSize: 0), .foregroundColor: color])
+}
+
 final class Bar: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let menu = NSMenu()
     let editor = Editor()
     var last: Summary?
+    var menuOpen = false
+    var viewsKey = ""  // 当前菜单里各视图对应的数据，没变化就不用换视图
 
     override init() {
         super.init()
@@ -359,11 +535,16 @@ final class Bar: NSObject, NSMenuDelegate {
         editor.onChange = { [weak self] in self?.refresh() }
         refresh()
         Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refresh() }
-        // 倒计时每秒更新菜单栏上的标记，不需要请求服务端
+        // 倒计时每秒更新一次，不需要请求服务端
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            if self?.editor.deadline != nil { self?.updateTitle() }
+            guard let self = self, self.editor.deadline != nil else { return }
+            self.updateTitle()
+            self.updateLine()
         }
     }
+
+    /// 点击后的回调：交给 editor，它会开始倒计时并触发预览
+    lazy var pick: Pick = { [weak self] key, value in self?.editor.edit(key, value) }
 
     /// 带上还没发布的点击去取数据，菜单栏和菜单马上显示点击后的预览
     func refresh() {
@@ -374,22 +555,42 @@ final class Bar: NSObject, NSMenuDelegate {
         last = s
         editor.saved = s?.saved
         updateTitle()
+        if menuOpen { updateViews() }  // 菜单开着：只原地换视图，不重建菜单
+        updateLine()
     }
 
     func updateTitle() {
         item.button?.attributedTitle = statusTitle(last, badge: editor.badge)
     }
 
-    // 菜单打开前才重建内容；菜单开着的时候后台刷新不会动它
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        fillMenu(menu, last, target: self, line: editor.line)
+    func updateLine() {
+        guard let line = menu.item(withTag: Tag.line) else { return }
+        setText(line, editor.line)
+        menu.item(withTag: Tag.lineSeparator)?.isHidden = editor.line == nil
     }
 
-    @objc func choose(_ sender: NSMenuItem) {
-        guard let pick = sender.representedObject as? [String: Any],
-              let key = pick["key"] as? String, let value = pick["value"] as? Double else { return }
-        editor.edit(key, value)
+    func updateViews() {
+        guard let s = last else { return }
+        let key = "\(s.model)|\(s.sleepIndex)|\(s.effort)|\(Int(s.fraction * 100))|\(s.offline)|\(Int(s.npu.utilization * 100))|\(s.left / 1000)"
+        guard key != viewsKey else { return }
+        viewsKey = key
+        menu.item(withTag: Tag.model)?.view = modelView(s, pick: pick)
+        menu.item(withTag: Tag.sleep)?.view = sleepView(s, pick: pick)
+        menu.item(withTag: Tag.size)?.view = sizeView(s, pick: pick)
+        menu.item(withTag: Tag.effort)?.view = effortView(s, pick: pick)
+        menu.item(withTag: Tag.npu)?.view = npuView(s)
     }
+
+    // 菜单打开前重建内容
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        fillMenu(menu, last, target: self, pick: pick, line: editor.line)
+        if let s = last {
+            viewsKey = "\(s.model)|\(s.sleepIndex)|\(s.effort)|\(Int(s.fraction * 100))|\(s.offline)|\(Int(s.npu.utilization * 100))|\(s.left / 1000)"
+        }
+    }
+    func menuWillOpen(_ menu: NSMenu) { menuOpen = true }
+    func menuDidClose(_ menu: NSMenu) { menuOpen = false }
+
     @objc func openWeb() { NSWorkspace.shared.open(URL(string: base + "/")!) }
     @objc func quit() {
         if editor.deadline != nil { editor.publish(leaving: true) }  // 倒计时没走完的改动先发布
@@ -397,50 +598,32 @@ final class Bar: NSObject, NSMenuDelegate {
     }
 }
 
-/// 一个带子菜单的选项：标题里写当前值，子菜单里勾选当前档，点击就是切换。
-func choiceItem(_ title: String, key: String, options: [String], values: [Double], selected: Int?,
-                target: Bar?, enabled: Bool = true) -> NSMenuItem {
-    let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-    let sub = NSMenu()
-    for (i, option) in options.enumerated() {
-        let entry = NSMenuItem(title: option, action: #selector(Bar.choose(_:)), keyEquivalent: "")
-        entry.target = target
-        entry.state = i == selected ? .on : .off
-        entry.representedObject = ["key": key, "value": values[i]] as [String: Any]
-        sub.addItem(entry)
-    }
-    item.submenu = sub
-    item.isEnabled = enabled
+func viewItem(_ view: NSView, tag: Int) -> NSMenuItem {
+    let item = NSMenuItem()
+    item.view = view
+    item.tag = tag
     return item
 }
 
-func fillMenu(_ menu: NSMenu, _ s: Summary?, target: Bar?, line: String? = nil) {
+func fillMenu(_ menu: NSMenu, _ s: Summary?, target: Bar?, pick: @escaping Pick = { _, _ in }, line: String? = nil) {
     menu.removeAllItems()
     menu.autoenablesItems = false
     if let s = s {
-        if let line = line { menu.addItem(textItem(line, color: .systemOrange)); menu.addItem(.separator()) }
-        let model = NSMenuItem()
-        model.view = modelView(s)
-        menu.addItem(model)
+        let lineItem = NSMenuItem()
+        lineItem.tag = Tag.line
+        setText(lineItem, line)
+        let separator = NSMenuItem.separator()
+        separator.tag = Tag.lineSeparator
+        separator.isHidden = line == nil
+        menu.addItem(lineItem)
+        menu.addItem(separator)
+        menu.addItem(viewItem(modelView(s, pick: pick), tag: Tag.model))
         menu.addItem(.separator())
-        let prefix = String(s.model.dropLast(s.size.count))  // Haonan-25.0-
-        let sizeIndex = sizes.firstIndex(of: s.size)
-        let effortIndex = efforts.firstIndex(of: s.effort)
-        let leftSteps = (0...10).map { Double(10 - $0) / 10 }
-        menu.addItem(choiceItem("昨晚睡眠：\(sleepLevels[s.sleepIndex]) · \(sleepTokens[s.sleepIndex])", key: "sleep",
-                                options: zip(sleepLevels, sleepTokens).map { "\($0) · \($1)" },
-                                values: (0..<5).map { Double($0) / 4 }, selected: s.sleepIndex, target: target))
-        menu.addItem(choiceItem("模型大小：\(s.size)", key: "clarity", options: sizes.map { prefix + $0 },
-                                values: (0..<sizes.count).map { bucketValue($0, sizes.count) }, selected: sizeIndex, target: target))
-        menu.addItem(choiceItem("推理强度：\(s.offline ? "关闭" : s.effort)", key: "desire", options: efforts,
-                                values: (0..<efforts.count).map { bucketValue($0, efforts.count) }, selected: effortIndex, target: target))
-        menu.addItem(choiceItem(s.offline ? "今日剩余额度（睡眠中不可调）" : "今日剩余额度：\(Int(s.fraction * 100))%", key: "left",
-                                options: leftSteps.map { "\(Int($0 * 100))%" }, values: leftSteps,
-                                selected: leftSteps.firstIndex { abs($0 - s.fraction) < 0.05 }, target: target, enabled: !s.offline))
+        menu.addItem(viewItem(sleepView(s, pick: pick), tag: Tag.sleep))
+        menu.addItem(viewItem(sizeView(s, pick: pick), tag: Tag.size))
+        menu.addItem(viewItem(effortView(s, pick: pick), tag: Tag.effort))
         menu.addItem(.separator())
-        let npu = NSMenuItem()
-        npu.view = npuView(s)
-        menu.addItem(npu)
+        menu.addItem(viewItem(npuView(s), tag: Tag.npu))
         menu.addItem(.separator())
         let sync = s.unpushed.map { $0 == 0 ? "已同步到 GitHub" : "\($0) 个版本未推送到 GitHub" } ?? "同步状态未知"
         menu.addItem(textItem("最近更新 \(stamp(s.updatedAt))", color: .secondaryLabelColor))
@@ -479,6 +662,11 @@ func texts(in view: NSView) -> [String] {
     var out: [String] = []
     if let field = view as? NSTextField { out.append(field.stringValue) }
     if let level = view as? NSLevelIndicator { out.append("[进度条 \(Int(level.doubleValue))/\(Int(level.maxValue))]") }
+    if let bar = view as? ClickBar { out.append("[可点额度条 \(Int(bar.value))/100 可点=\(bar.enabled)]") }
+    if let control = view as? PillSegments {
+        out.append("[" + control.labels.enumerated().map { ($0.offset == control.selected ? "●" : "○") + $0.element }.joined(separator: " ") + "]")
+    }
+    if let track = view as? EffortTrack { out.append("[滑轨 \(track.index)/\(efforts.count - 1)]") }
     view.subviews.forEach { out += texts(in: $0) }
     return out
 }
@@ -529,7 +717,7 @@ if args.contains("--dump") || args.contains("--snapshot") {
                 snapshot(menu, to: args[i + 1])
             } else {
                 print("菜单栏:" + statusTitle(s).string + "  菜单宽度: \(Int(menu.size.width))（视图宽度 \(Int(menuWidth))）")
-                for item in menu.items {
+                for item in menu.items where !item.isHidden {
                     if item.isSeparatorItem { print("----------") }
                     else if let view = item.view { print(texts(in: view).joined(separator: " | ")) }
                     else { print(item.attributedTitle?.string ?? item.title) }
